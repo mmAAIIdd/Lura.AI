@@ -43,7 +43,9 @@
     /* Hero staging. The cloud is additive on black and subtractive on white,
        so the blend mode is a token rather than a hard-coded value. */
     --gas-blend: screen;
-    --gas-boost: 1;
+    /* Lifted from 1: the hero cloud no longer screens over the page, and this is
+       the few percent of brightness that change costs it. */
+    --gas-boost: 1.12;
     --stage-line: rgba(255, 255, 255, .2);
     --dot: rgba(255, 255, 255, .07);
     --ring: rgba(255, 255, 255, .022);
@@ -255,12 +257,28 @@
     position: absolute; inset: 0; z-index: -6; overflow: hidden; pointer-events: none;
     perspective: 700px; perspective-origin: 50% 50%;
   }
+  /* The plane holds still and carries the mask; the grid travels on the child
+     below. Moving this element instead would drag its mask along with it, and
+     the fade would snap back every time the loop restarted.
+     200vw rather than 340vw: the near edge sits at the perspective origin and
+     everything beyond it converges, so the extra width never reached the screen
+     — it was only surface the compositor had to keep. */
   .hero-plane {
-    position: absolute; left: 50%; width: 340vw; height: 150vh; margin-left: -170vw;
+    position: absolute; left: 50%; width: 200vw; height: 150vh; margin-left: -100vw;
+    overflow: hidden;
+  }
+  .hero-plane::before {
+    /* One tile of overscan on top, so a full loop never uncovers the edge. */
+    position: absolute; top: -112px; right: 0; bottom: 0; left: 0; content: "";
     background-image:
       repeating-linear-gradient(to right, var(--stage-line) 0 1px, transparent 1px 112px),
       repeating-linear-gradient(to bottom, var(--stage-line) 0 1px, transparent 1px 112px);
+    /* background-position is a paint property: every frame re-rasterised both
+       gradients across the whole surface, twice over, which is what pinned the
+       landing at single-digit frame rates. A transform moves a layer that was
+       rasterised once. */
     animation: stage-flow 12s linear infinite;
+    will-change: transform;
   }
   .hero-floor {
     bottom: -30vh; transform-origin: 50% 100%; transform: rotateX(76deg);
@@ -284,12 +302,20 @@
      around the ring, then blurred far past the point where any edge survives.
      It is sized to sit under the whole headline, not to ring it — the clear
      centre is only wide enough to keep the middle from going solid. */
+  /* z-index -7 puts the cloud under the grid and the dot matrix, which is what
+     lets it drop mix-blend-mode — and dropping it is the largest single win on
+     this page. A blended element cannot be composited on its own: the browser
+     has to re-blend it against everything beneath it for every frame of the
+     animation, and that is what held the landing near 30fps. Screened over a
+     black page and multiplied over a white one both land within a few percent
+     of plain compositing anyway. The grid now draws over the cloud instead of
+     glowing through it, and --gas-boost carries the brightness difference. */
   .gas {
-    position: absolute; top: 50%; left: 50%; z-index: -3;
+    position: absolute; top: 50%; left: 50%; z-index: -7;
     translate: -50% -50%;
     /* Sized off the larger viewport axis, not width alone: on a short wide
        window a vw-only halo lands as a thin band under the headline. */
-    pointer-events: none; mix-blend-mode: var(--gas-blend);
+    pointer-events: none;
     will-change: rotate, scale, translate, opacity;
   }
   /* Sizes are deliberately close to the headline block rather than to the
@@ -368,7 +394,10 @@
     mix-blend-mode: var(--gas-blend);
     -webkit-mask-image: radial-gradient(closest-side, #000 14%, transparent 66%);
             mask-image: radial-gradient(closest-side, #000 14%, transparent 66%);
-    animation: gas-spin 78s linear infinite;
+    /* No rotation. A full turn took 78 seconds — slower than anyone looks at a
+       page header — while holding a blurred layer this size permanently
+       composited on all three subpages. The bloom is static now, and identical
+       to look at. */
   }
   .page-aura::after {
     position: absolute; inset: 0; content: "";
@@ -378,8 +407,12 @@
             mask-image: linear-gradient(to bottom, #000, transparent 74%);
   }
   /* Grain keeps the large gradients from banding on wide gamut displays. */
+  /* Composited plainly rather than blended: overlay on a layer this size,
+     stacked above everything that moves, was the second-largest cost in the
+     hero. The lower opacity is what keeps unblended noise from reading as haze
+     on the dark page — it still breaks up banding, which is all it is for. */
   .hero-grain {
-    position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .085; mix-blend-mode: overlay;
+    position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .05;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   /* Softens the four edges into the page. It stops short of full strength at the
@@ -521,7 +554,8 @@
 }
 /* One grid cell of travel, so the loop is seamless. */
 @keyframes stage-flow {
-  to { background-position: 0 112px, 0 112px; }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 112px, 0); }
 }
 
 @media (max-width: 640px) {
@@ -554,6 +588,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .gas, .hero-plane, .page-aura::before { animation: none !important; }
+  .gas, .hero-plane::before { animation: none !important; }
   *, *::before, *::after { transition-duration: .01ms !important; }
 }
