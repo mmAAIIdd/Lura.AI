@@ -21,6 +21,9 @@ ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ARG NEXT_PUBLIC_SITE_URL=
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+# The runtime stage below copies .next/standalone, which Next only emits when
+# asked. Every other target — Vercel, a plain local build — has no use for it.
+ENV NEXT_STANDALONE=1
 RUN npm run build
 
 FROM node:22-alpine

@@ -81,9 +81,22 @@ Two settings are dashboard-only and `vercel.json` cannot carry them:
   site is a reload loop, not a redirect.
 
 `apps/web/` is a second Vercel project — import the same repository again with
-Root Directory `apps/web` and give it `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. `apps/api/` is a container and does not
-run on Vercel; it needs a host that runs Docker.
+Root Directory `apps/web`. It needs `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and nothing else: sign-in and sign-up
+talk to Supabase directly, and the backend session the workspace runs on is
+opened separately and is allowed to fail, so the auth app works with
+`apps/api/` offline. `NEXT_PUBLIC_SITE_URL` is optional there — without it the
+confirmation links fall back to the project's own production domain.
+
+Two steps outside Vercel finish the loop. In Supabase, under **Authentication ->
+URL Configuration**, set the Site URL to the auth app's domain and add
+`https://that-domain/**` to Redirect URLs; a redirect Supabase does not
+recognise is not refused loudly, the link just goes to the Site URL instead.
+Then set `VITE_AUTH_APP_URL` on the marketing project to that same domain and
+redeploy, which is what turns *Вход* from a notice back into a link.
+
+`apps/api/` is a container and does not run on Vercel; it needs a host that runs
+Docker.
 
 ## Current application foundation
 

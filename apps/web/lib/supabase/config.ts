@@ -25,7 +25,26 @@ export function isSupabaseConfigured(): boolean {
  * Origin this app is reached on. Supabase rejects an `emailRedirectTo` that is
  * not in the project's redirect allow-list, so this has to match what the
  * dashboard has under Authentication -> URL Configuration.
+ *
+ * The localhost default is only ever right on a development machine: baked
+ * into a confirmation letter it sends the recipient to their own computer,
+ * which breaks registration for everyone who is not the developer. So a
+ * deployment falls back to the platform's own answer before localhost.
+ *
+ * A variable added without a value arrives as an empty string rather than
+ * undefined, which is why this tests truthiness instead of using `??`.
  */
 export function getSiteUrl(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  /* Vercel fills this in with the project's stable production domain, so a
+     fresh import sends working letters with no dashboard step. Deliberately
+     not VERCEL_URL: that one changes with every deployment and would never
+     match the Supabase allow-list. Server-only, which is fine — every caller
+     of this is a server action. */
+  const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (production) return `https://${production.replace(/\/+$/, "")}`;
+
+  return "http://localhost:3001";
 }
