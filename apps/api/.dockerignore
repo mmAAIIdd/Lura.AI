@@ -1,0 +1,15 @@
+# Deny the whole context, then re-admit exactly what the runtime image needs.
+# An allowlist means a new local file — an .env, a dump, a notebook — cannot be
+# baked into a published layer just because someone forgot to add a deny rule.
+*
+
+!pyproject.toml
+!alembic.ini
+!app/
+!alembic/
+
+# Re-denied inside the allowed directories.
+**/__pycache__/
+**/*.py[cod]
+**/.env*
+**/*.log

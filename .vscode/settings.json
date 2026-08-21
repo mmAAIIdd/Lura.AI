@@ -1,0 +1,16 @@
+{
+  // Tailwind v4 moved configuration into the stylesheet via at-rules such as
+  // @theme. VS Code's built-in CSS language service does not know them and
+  // reports "Unknown at rule", even though the file is valid — Tailwind's
+  // compiler consumes those rules at build time.
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore",
+
+  // Type-check with the TypeScript pinned in package.json instead of the copy
+  // bundled with the editor, so the IDE and `npm run lint` cannot disagree.
+  "typescript.tsdk": "node_modules/typescript/lib",
+
+  // The API has no virtualenv; its packages live in the global interpreter.
+  "python.analysis.extraPaths": ["apps/api"]
+}

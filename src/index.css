@@ -1,0 +1,559 @@
+@import "tailwindcss";
+
+@theme {
+  /* Apple's own faces come first, so the site renders in genuine SF on Mac and
+     iOS. Everywhere else Inter Variable takes over — it was drawn as a UI face
+     on the same principles, so the proportions carry across platforms. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter Variable", "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Variable", "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, monospace;
+}
+
+@layer base {
+  /* Dark is the brand default; light is an override. Both are always stamped
+     explicitly by the boot script in index.html, so there is no third state.
+     Every token here is read somewhere below — check before adding one back. */
+  :root, :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #000000;
+    --bg-raised: #050506;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.18);
+    --text: #f4f4f6;
+    --muted: #8e9099;
+    --muted-soft: #7c7e88;
+    --accent: #d8d9de;
+
+    /* Surfaces that sit on top of the page rather than in it. */
+    --panel: #0a0a0c;
+    --raise: rgba(255, 255, 255, .03);
+    --raise-hover: rgba(255, 255, 255, .07);
+    --card-top: rgba(255, 255, 255, .045);
+    --card-bottom: rgba(255, 255, 255, .015);
+    --shadow: 0 18px 44px rgba(0, 0, 0, .6);
+
+    /* Inverted controls: solid button, and the wordmark chip in the bar. */
+    --solid: #ffffff;
+    --solid-ink: #000000;
+    --solid-hover: #e3e3e6;
+    /* The CTA's resting contour. It was hard-coded white, which left it
+       invisible against the light theme's white page. */
+    --cta-ring: rgba(255, 255, 255, .3);
+
+    /* Hero staging. The cloud is additive on black and subtractive on white,
+       so the blend mode is a token rather than a hard-coded value. */
+    --gas-blend: screen;
+    --gas-boost: 1;
+    --stage-line: rgba(255, 255, 255, .2);
+    --dot: rgba(255, 255, 255, .07);
+    --ring: rgba(255, 255, 255, .022);
+    --shade: rgba(0, 0, 0, .44);
+    --shade-mid: rgba(0, 0, 0, .14);
+    --vignette: rgba(0, 0, 0, .92);
+    --scrim: rgba(0, 0, 0, .78);
+    --headline-from: #ffffff;
+    --headline-mid: #f5f6f8;
+    --headline-to: #e4e5ea;
+
+    /* Single source of truth: the hero sizes itself against this, so the bar and
+       the first screen can never drift apart. */
+    --header-h: 87px;
+    background: var(--bg);
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-raised: #f7f7f9;
+    --line: rgba(0, 0, 0, 0.10);
+    --line-strong: rgba(0, 0, 0, 0.18);
+    --text: #0b0b0e;
+    --muted: #5c5e67;
+    --muted-soft: #6d6f78;
+    --accent: #2c2d33;
+
+    --panel: #ffffff;
+    --raise: rgba(0, 0, 0, .028);
+    --raise-hover: rgba(0, 0, 0, .06);
+    --card-top: rgba(255, 255, 255, .9);
+    --card-bottom: rgba(0, 0, 0, .022);
+    --shadow: 0 18px 44px rgba(15, 18, 40, .12);
+
+    --solid: #0b0b0e;
+    --solid-ink: #ffffff;
+    --solid-hover: #26272d;
+    --cta-ring: rgba(0, 0, 0, .16);
+
+    /* multiply keeps the spectrum visible on white — screen would blow it out. */
+    --gas-blend: multiply;
+    --gas-boost: 1.05;
+    --stage-line: rgba(0, 0, 0, .16);
+    --dot: rgba(0, 0, 0, .075);
+    --ring: rgba(0, 0, 0, .03);
+    --shade: rgba(255, 255, 255, .28);
+    --shade-mid: rgba(255, 255, 255, .09);
+    --vignette: rgba(255, 255, 255, .92);
+    --scrim: rgba(18, 20, 32, .42);
+    --headline-from: #08080b;
+    --headline-mid: #1c1d22;
+    --headline-to: #34353c;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    min-width: 320px;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-weight: 450;
+    /* Let the optical-size axis do its job: small text opens up, large text
+       tightens. Contextual alternates and proportional figures are on for the
+       same reason Apple ships them — text set in running copy, not in a table. */
+    font-optical-sizing: auto;
+    font-feature-settings: "calt" 1, "liga" 1, "pnum" 1, "kern" 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* Apple tracks display sizes tighter as they grow; a single value across the
+     scale is what makes large headings look loose and small ones look cramped. */
+  h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 640; letter-spacing: -.022em; }
+  h1 { letter-spacing: -.032em; }
+  /* Lining, tabular figures wherever numbers are meant to be compared. */
+  code, kbd, samp, pre { font-feature-settings: "tnum" 1, "zero" 1; }
+  button, input, select, textarea { font: inherit; }
+  a, button { -webkit-tap-highlight-color: transparent; }
+  ::selection { background: var(--line-strong); color: var(--text); }
+
+  /* Only the flat surfaces cross-fade when the theme flips. The hero's blended
+     layers are excluded: transitioning a blend mode mid-flight muddies them. */
+  body, .site-shell, .gh-header, .card, .search-panel, .section, .site-footer {
+    transition: background-color .28s ease, border-color .28s ease, color .28s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body, .site-shell, .gh-header, .card, .search-panel, .section, .site-footer { transition: none; }
+  }
+}
+
+@layer components {
+  .site-shell { display: flex; min-height: 100vh; flex-direction: column; overflow-x: hidden; background: var(--bg); }
+  .site-container { width: min(100% - 40px, 1280px); margin-inline: auto; }
+  /* Reserves the space a lazily loaded route is about to occupy. */
+  .route-fallback { min-height: calc(100vh - var(--header-h)); }
+
+  /* ---------- Header ---------- */
+  .gh-header {
+    position: sticky; top: 0; z-index: 60;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+    backdrop-filter: blur(14px) saturate(140%);
+  }
+  .gh-header-inner { display: flex; height: var(--header-h); align-items: center; gap: 31px; }
+  .gh-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+  .gh-brand-mark {
+    display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px;
+    background: var(--solid); color: var(--solid-ink); font-size: 14px; font-weight: 900;
+  }
+  /* The three sections are the whole navigation, so they stay in the bar as long
+     as they fit rather than hiding behind a burger on ordinary laptop widths. */
+  .gh-nav { display: none; align-items: center; gap: 2px; }
+  @media (min-width: 1000px) { .gh-nav { display: flex; } }
+  .gh-nav-link {
+    position: relative; padding: 7px 10px; border-radius: 7px;
+    color: var(--muted); font-size: 14px; font-weight: 600; white-space: nowrap;
+    transition: color .16s ease, background .16s ease;
+  }
+  .gh-nav-link:hover { color: var(--text); background: var(--raise-hover); }
+  .gh-nav-link-active { color: var(--text); }
+  .gh-nav-link-active::after {
+    position: absolute; right: 10px; bottom: -1px; left: 10px; height: 2px; border-radius: 2px;
+    background: var(--text); content: "";
+  }
+  .gh-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .gh-search {
+    display: flex; align-items: center; gap: 8px; width: clamp(120px, 18vw, 220px); height: 34px; padding: 0 8px 0 11px;
+    border: 1px solid var(--line-strong); border-radius: 7px; background: var(--raise);
+    color: var(--muted-soft); font-size: 13px; cursor: pointer; transition: border-color .16s ease, background .16s ease;
+  }
+  .gh-search:hover { border-color: var(--line-strong); background: var(--raise-hover); }
+  .gh-search span { flex: 1; text-align: left; }
+  .gh-kbd {
+    display: grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px;
+    border: 1px solid var(--line-strong); border-radius: 5px;
+    color: var(--muted-soft); font-family: var(--font-mono); font-size: 11px;
+  }
+  .gh-button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 34px; padding: 0 14px;
+    border: 1px solid transparent; border-radius: 7px; font-size: 13px; font-weight: 650; white-space: nowrap;
+    transition: background .16s ease, border-color .16s ease, transform .16s ease, box-shadow .16s ease;
+  }
+  .gh-button-ghost { border-color: var(--line-strong); color: var(--text); background: var(--raise); }
+  .gh-button-ghost:hover { border-color: var(--line-strong); background: var(--raise-hover); }
+  .gh-button-primary { color: var(--solid-ink); background: var(--solid); }
+  .gh-button-primary:hover { background: var(--solid-hover); }
+  .gh-button-lg { height: 48px; padding: 0 24px; border-radius: 10px; font-size: 15px; }
+  /* Square icon control. The burger is the same thing plus a rule that retires
+     it once the nav labels fit, so the theme toggle must not share that class. */
+  .gh-icon-button, .gh-menu-button {
+    display: grid; width: 34px; height: 34px; place-items: center;
+    border: 1px solid var(--line-strong); border-radius: 7px;
+    color: var(--text); background: transparent; cursor: pointer;
+    transition: background .16s ease, border-color .16s ease;
+  }
+  .gh-icon-button:hover, .gh-menu-button:hover { background: var(--raise-hover); }
+  @media (min-width: 1000px) { .gh-menu-button { display: none; } }
+  .gh-mobile-nav { border-top: 1px solid var(--line); background: var(--bg-raised); }
+  .gh-mobile-link { display: flex; align-items: center; justify-content: space-between; padding: 13px 4px; border-bottom: 1px solid var(--line); color: var(--text); font-size: 15px; font-weight: 600; }
+
+  /* The bar is set 40% larger than the default control scale. Scoped to the
+     header so `.gh-button` and `.gh-kbd` keep their normal size on the pages
+     below, where they are body-copy controls rather than primary navigation. */
+  .gh-header .gh-brand { gap: 14px; font-size: 25px; }
+  .gh-header .gh-brand-mark { width: 39px; height: 39px; border-radius: 11px; font-size: 20px; }
+  .gh-header .gh-nav { gap: 3px; }
+  .gh-header .gh-nav-link { padding: 10px 14px; border-radius: 10px; font-size: 19px; }
+  .gh-header .gh-nav-link-active::after { right: 14px; left: 14px; height: 3px; }
+  .gh-header .gh-actions { gap: 11px; }
+  .gh-header .gh-search { width: clamp(168px, 25vw, 308px); height: 48px; padding: 0 11px 0 15px; border-radius: 10px; font-size: 18px; }
+  .gh-header .gh-kbd { min-width: 28px; height: 28px; padding: 0 7px; border-radius: 7px; font-size: 15px; }
+  .gh-header .gh-button { height: 48px; padding: 0 20px; gap: 10px; border-radius: 10px; font-size: 18px; }
+  .gh-header .gh-menu-button, .gh-header .gh-icon-button { width: 48px; height: 48px; border-radius: 10px; }
+  .gh-header .gh-mobile-link { padding: 18px 6px; font-size: 21px; }
+
+  /* At the larger scale the full search field stops fitting alongside three
+     nav labels. Rather than let the bar clip (the shell hides overflow, so it
+     would fail silently), the field folds down to its icon and the gaps tighten. */
+  @media (max-width: 1399px) {
+    .gh-header-inner { gap: 14px; }
+    .gh-header .gh-nav-link { padding: 10px 8px; }
+    .gh-header .gh-button { padding: 0 14px; }
+    .gh-header .gh-search { width: 48px; padding: 0; justify-content: center; }
+    .gh-header .gh-search span, .gh-header .gh-kbd { display: none; }
+  }
+  /* On a phone there is no room for a secondary text button beside the primary
+     one; "Вход" moves into the menu, which now carries the account links too. */
+  @media (max-width: 479px) {
+    .gh-header .gh-actions > .gh-button-ghost { display: none; }
+  }
+  .gh-mobile-section {
+    padding: 12px 4px 4px; color: var(--muted-soft);
+    font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  }
+
+  /* ---------- Hero: a coloured gas halo on patterned deep black ---------- */
+  .hero {
+    position: relative; isolation: isolate; overflow: hidden;
+    display: grid; place-items: center;
+    min-height: calc(100vh - var(--header-h));
+    background: var(--bg);
+  }
+
+  /* A real perspective stage: two planes tilted away from the camera, above and
+     below, so the cloud reads as floating in a room rather than pasted on a
+     flat page. The lines drift toward the viewer, which is what sells the depth. */
+  .hero-stage {
+    position: absolute; inset: 0; z-index: -6; overflow: hidden; pointer-events: none;
+    perspective: 700px; perspective-origin: 50% 50%;
+  }
+  .hero-plane {
+    position: absolute; left: 50%; width: 340vw; height: 150vh; margin-left: -170vw;
+    background-image:
+      repeating-linear-gradient(to right, var(--stage-line) 0 1px, transparent 1px 112px),
+      repeating-linear-gradient(to bottom, var(--stage-line) 0 1px, transparent 1px 112px);
+    animation: stage-flow 12s linear infinite;
+  }
+  .hero-floor {
+    bottom: -30vh; transform-origin: 50% 100%; transform: rotateX(76deg);
+    -webkit-mask-image: linear-gradient(to top, #000 3%, transparent 72%);
+            mask-image: linear-gradient(to top, #000 3%, transparent 72%);
+  }
+  .hero-roof {
+    top: -30vh; transform-origin: 50% 0; transform: rotateX(-76deg);
+    -webkit-mask-image: linear-gradient(to bottom, #000 3%, transparent 72%);
+            mask-image: linear-gradient(to bottom, #000 3%, transparent 72%);
+  }
+
+  /* Fine dot matrix over the stage — texture at a scale the grid does not cover. */
+  .hero-pattern {
+    position: absolute; inset: 0; z-index: -5; pointer-events: none;
+    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+
+  /* The glow is a gas, not a fan of shafts: full-spectrum colour spread evenly
+     around the ring, then blurred far past the point where any edge survives.
+     It is sized to sit under the whole headline, not to ring it — the clear
+     centre is only wide enough to keep the middle from going solid. */
+  .gas {
+    position: absolute; top: 50%; left: 50%; z-index: -3;
+    translate: -50% -50%;
+    /* Sized off the larger viewport axis, not width alone: on a short wide
+       window a vw-only halo lands as a thin band under the headline. */
+    pointer-events: none; mix-blend-mode: var(--gas-blend);
+    will-change: rotate, scale, translate, opacity;
+  }
+  /* Sizes are deliberately close to the headline block rather than to the
+     viewport: a halo that reaches the window edges has to be blurred and
+     rasterised across the whole screen on first paint, and it leaves the page
+     with no ground of its own to sit on. */
+  .gas-1 {
+    width: min(max(88vw, 84vh), 1500px); aspect-ratio: 1.75; opacity: calc(.46 * var(--gas-boost));
+    background: conic-gradient(from 0deg,
+      #ff6a3d, #ffb02e, #a8ff3c, #2ee6a8, #33c9ff, #6a5cff, #d24bff, #ff3d8b, #ff6a3d);
+    /* Blur only far enough to kill the conic's straight seams. Past roughly
+       a third of the layer's short side the hues melt into one another and the
+       layer stops reading as distinct colour. */
+    filter: blur(30px) saturate(1.62) contrast(1.05);
+    -webkit-mask-image: radial-gradient(closest-side, transparent 5%, #000 27%, transparent 94%);
+            mask-image: radial-gradient(closest-side, transparent 5%, #000 27%, transparent 94%);
+    /* Slow on purpose: with defined hue bands the eye tracks the rotation
+       easily, and anything under ~30s reads as a spinning pinwheel. */
+    animation: gas-spin 38s linear infinite, gas-breathe 11s ease-in-out infinite;
+  }
+  .gas-2 {
+    width: min(max(72vw, 70vh), 1240px); aspect-ratio: 1.6; opacity: calc(.28 * var(--gas-boost));
+    background: conic-gradient(from 140deg,
+      #ff2f6d, #ff9a2e, #ffe94a, #4dff9e, #2ad9ff, #8a5cff, #ff4de0, #ff2f6d);
+    filter: blur(24px) saturate(1.6) contrast(1.04);
+    -webkit-mask-image: radial-gradient(closest-side, transparent 7%, #000 31%, transparent 92%);
+            mask-image: radial-gradient(closest-side, transparent 7%, #000 31%, transparent 92%);
+    animation: gas-spin-rev 48s linear infinite, gas-breathe-2 8s ease-in-out infinite;
+  }
+  /* Loose clouds drifting across the ring — without them the two conic layers
+     stay too even and the halo reads as a printed gradient instead of vapour.
+     This is the layer that carries the visible motion: the conic spins read as
+     colour churn, the blobs travel. */
+  .gas-3 {
+    width: min(max(98vw, 94vh), 1680px); aspect-ratio: 1.9; opacity: calc(.38 * var(--gas-boost));
+    /* Each blob keeps a flat core before it falls off, so at this blur it reads
+       as a body of colour with an edge rather than a smear. The travel of those
+       four bodies is what makes the motion legible. */
+    background:
+      radial-gradient(circle at 30% 28%, rgba(255,120,60,.78) 0 11%, transparent 40%),
+      radial-gradient(circle at 74% 36%, rgba(80,140,255,.72) 0 10%, transparent 38%),
+      radial-gradient(circle at 62% 76%, rgba(210,70,255,.68) 0 9%, transparent 36%),
+      radial-gradient(circle at 26% 70%, rgba(40,220,190,.64) 0 10%, transparent 38%);
+    filter: blur(34px) saturate(1.5) contrast(1.04);
+    -webkit-mask-image: radial-gradient(closest-side, transparent 3%, #000 26%, transparent 94%);
+            mask-image: radial-gradient(closest-side, transparent 3%, #000 26%, transparent 94%);
+    animation: gas-drift 19s ease-in-out infinite;
+  }
+
+  /* Keeps the headline sitting on ground rather than on the brightest part of
+     the halo. Sized to the text block, not to the halo: a scrim wide enough to
+     cover the cloud is what flattened the colour into a pastel wash. */
+  .hero-shade {
+    position: absolute; top: 50%; left: 50%; z-index: -2;
+    width: min(94vw, 1180px); aspect-ratio: 2.5; transform: translate(-50%, -50%);
+    pointer-events: none;
+    background: radial-gradient(ellipse, var(--shade) 0%, var(--shade-mid) 44%, transparent 72%);
+  }
+  /* Page headers get a quiet echo of the hero: the same spectrum, far weaker,
+     plus the same dot matrix. Built from tokens so it survives both themes —
+     the starfield it replaced was painted in white and vanished on a light page. */
+  /* z-index 0, not -1: the section paints an opaque background of its own, and a
+     negative layer would sit behind it and never be seen. The page content that
+     follows is positioned, so it still stacks above this. */
+  .page-aura {
+    position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+  }
+  /* Offset toward the trailing edge: these page headers set their text against
+     the left margin, so the bloom lands in the space that would otherwise be
+     a blank half-screen. */
+  .page-aura::before {
+    position: absolute; top: -34%; left: 68%; width: min(86vw, 1120px); aspect-ratio: 1.5;
+    translate: -50% 0; content: "";
+    background: conic-gradient(from 200deg, #ff6a3d, #a8ff3c, #33c9ff, #d24bff, #ff6a3d);
+    filter: blur(104px) saturate(1.3); opacity: calc(.34 * var(--gas-boost));
+    mix-blend-mode: var(--gas-blend);
+    -webkit-mask-image: radial-gradient(closest-side, #000 14%, transparent 66%);
+            mask-image: radial-gradient(closest-side, #000 14%, transparent 66%);
+    animation: gas-spin 78s linear infinite;
+  }
+  .page-aura::after {
+    position: absolute; inset: 0; content: "";
+    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+    background-size: 30px 30px;
+    -webkit-mask-image: linear-gradient(to bottom, #000, transparent 74%);
+            mask-image: linear-gradient(to bottom, #000, transparent 74%);
+  }
+  /* Grain keeps the large gradients from banding on wide gamut displays. */
+  .hero-grain {
+    position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .085; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  /* Softens the four edges into the page. It stops short of full strength at the
+     edges on purpose — a circle reaching opacity at 84% of the radius erased the
+     outer two thirds of the halo, which is why the colour looked small. */
+  .hero-vignette {
+    position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 86% 80% at 50% 50%, transparent 36%, var(--vignette) 100%);
+  }
+
+  .hero-headline {
+    font-family: var(--font-display);
+    font-size: clamp(26px, 4.2vw, 60px);
+    font-weight: 660; line-height: 1.1; letter-spacing: -.032em;
+    max-width: 26ch; text-wrap: balance;
+    /* Cyrillic diacritics (the breve on "й", the dots on "ё") rise above the line
+       box, and background-clip: text paints nothing outside the element box —
+       without this padding they lose their gradient and read as stray smudges. */
+    padding-block: .14em .05em;
+    /* Barely a fade: every line of this sentence carries equal weight, so the
+       gradient is only a sheen. Anything deeper and the closing line — the one
+       naming the payoff — reads as the faded afterthought. */
+    background: linear-gradient(180deg, var(--headline-from) 30%, var(--headline-mid) 74%, var(--headline-to) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+
+  .hero-cta {
+    position: relative; z-index: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    height: clamp(56px, 6vw, 72px); padding: 0 clamp(32px, 4.4vw, 54px);
+    border-radius: 999px; background: var(--solid); color: var(--solid-ink);
+    font-size: clamp(16px, 1.5vw, 20px); font-weight: 700; letter-spacing: -.01em;
+    box-shadow: var(--shadow);
+    /* No idle animation: the button sits still and answers the pointer. */
+    transition: scale .2s ease, background .2s ease;
+  }
+  /* A single resting contour, held clear of the edge so the button reads as an
+     object sitting in space rather than a flat shape. */
+  .hero-cta::before {
+    position: absolute; inset: clamp(-14px, -1.1vw, -10px); border-radius: 999px;
+    border: 1px solid var(--cta-ring); content: "";
+  }
+  .hero-cta:hover { background: var(--solid-hover); scale: 1.06; }
+  .hero-cta:active { scale: .98; }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(46px, 9.5vw, 132px);
+    font-weight: 700; line-height: .95; letter-spacing: -.035em;
+    /* The breve over "й" rises above the line box, and background-clip: text paints
+       nothing outside the element box — without this padding the diacritic loses its
+       gradient and reads as a stray smudge over the headline. */
+    padding-block: .18em .06em;
+    background: linear-gradient(180deg, var(--headline-from) 24%, var(--headline-mid) 78%, var(--headline-to) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  /* ---------- Sections & cards ---------- */
+  .section { position: relative; border-top: 1px solid var(--line); background: var(--bg); }
+  .section-alt { background: linear-gradient(180deg, var(--bg-raised), var(--bg)); }
+  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+  .section-title { font-family: var(--font-display); font-size: clamp(30px, 4.2vw, 52px); font-weight: 680; line-height: 1.06; letter-spacing: -.025em; }
+  .lead { color: var(--muted); font-size: clamp(15px, 1.5vw, 18px); line-height: 1.7; }
+
+  .card {
+    position: relative; border: 1px solid var(--line); border-radius: 14px;
+    background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
+    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  }
+  .card:hover { border-color: var(--line-strong); transform: translateY(-3px); box-shadow: var(--shadow); }
+  .card-glow { border-color: rgba(255,255,255,.28); }
+  .card-icon {
+    display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px;
+    border: 1px solid var(--line-strong); background: var(--raise-hover); color: var(--text);
+  }
+  .stat-value { font-family: var(--font-display); font-size: clamp(28px, 3.4vw, 42px); font-weight: 700; letter-spacing: -.02em; }
+
+  /* ---------- Search overlay ---------- */
+  .search-overlay { position: fixed; inset: 0; z-index: 90; display: grid; justify-items: center; padding: 12vh 20px 20px; background: var(--scrim); backdrop-filter: blur(6px); }
+  .search-panel {
+    display: flex; flex-direction: column; width: min(720px, 100%); max-height: 72vh; overflow: hidden;
+    border: 1px solid var(--line-strong); border-radius: 14px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+  .search-input-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .search-input { flex: 1; border: 0; background: transparent; color: var(--text); font-size: 16px; outline: none; }
+  .search-input::placeholder { color: var(--muted-soft); }
+  .search-results { overflow-y: auto; padding: 8px; }
+  .search-group-title { padding: 10px 10px 6px; color: var(--muted-soft); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .search-item { width: 100%; padding: 11px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--text); text-align: left; cursor: pointer; transition: background .14s ease; }
+  .search-item:hover, .search-item-active { background: var(--raise-hover); }
+  .search-item strong { display: block; font-size: 14px; font-weight: 620; }
+  .search-item p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .search-empty { padding: 26px 14px; color: var(--muted); font-size: 14px; text-align: center; }
+
+  .site-footer { border-top: 1px solid var(--line); background: var(--bg-raised); }
+  .footer-link { color: var(--muted); font-size: 14px; transition: color .16s ease; }
+  .footer-link:hover { color: var(--text); }
+}
+
+@layer utilities {
+  .grid-lines {
+    background-image:
+      linear-gradient(var(--stage-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--stage-line) 1px, transparent 1px);
+    background-size: 46px 46px;
+  }
+  /* Emphasis without colour — the palette keeps hue reserved for the hero burst. */
+  .text-gradient {
+    background: linear-gradient(96deg, var(--headline-from), var(--headline-to));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+}
+
+/* The layers keep `translate: -50% -50%` for centring, so every animation below
+   drives `rotate` and `scale` instead — separate properties that cannot knock
+   the centring out from under the element. */
+/* Amplitude is the whole point here. Under an 80px blur a 7% scale step and a
+   .1 opacity step are invisible, so each layer swings roughly half its own
+   opacity, travels a few percent of the viewport, and the spins run fast enough
+   for the colour churn to register within a few seconds of landing.
+   Every opacity stop carries --gas-boost: keyframes override the declared
+   opacity outright, so dropping the token here would lose the light-theme lift
+   the moment the animation starts. */
+@keyframes gas-spin { to { rotate: 360deg; } }
+@keyframes gas-spin-rev { to { rotate: -360deg; } }
+@keyframes gas-breathe {
+  0%, 100% { translate: -50% -50%; scale: 1; opacity: calc(.3 * var(--gas-boost)); }
+  50% { translate: calc(-50% + 2vw) calc(-50% - 1.6vh); scale: 1.12; opacity: calc(.62 * var(--gas-boost)); }
+}
+@keyframes gas-breathe-2 {
+  0%, 100% { translate: -50% -50%; scale: 1.05; opacity: calc(.18 * var(--gas-boost)); }
+  45% { translate: calc(-50% - 2.2vw) calc(-50% + 1.3vh); scale: .92; opacity: calc(.44 * var(--gas-boost)); }
+}
+@keyframes gas-drift {
+  0%, 100% { translate: -50% -50%; rotate: 0deg; scale: 1; opacity: calc(.28 * var(--gas-boost)); }
+  34% { translate: calc(-50% + 3vw) calc(-50% + 2vh); rotate: 20deg; scale: 1.1; opacity: calc(.5 * var(--gas-boost)); }
+  67% { translate: calc(-50% - 2.4vw) calc(-50% - 2vh); rotate: -15deg; scale: .94; opacity: calc(.35 * var(--gas-boost)); }
+}
+/* One grid cell of travel, so the loop is seamless. */
+@keyframes stage-flow {
+  to { background-position: 0 112px, 0 112px; }
+}
+
+@media (max-width: 640px) {
+  .site-container { width: min(100% - 28px, 1280px); }
+  /* The 40% bump is a desktop gesture. On a 430px screen the same controls run
+     past the edge, so the bar steps back down rather than clipping. */
+  :root { --header-h: 74px; }
+  .gh-header-inner { gap: 12px; }
+  .gh-header .gh-brand { gap: 10px; font-size: 20px; }
+  .gh-header .gh-brand-mark { width: 32px; height: 32px; border-radius: 9px; font-size: 16px; }
+  .gh-header .gh-actions { gap: 8px; }
+  .gh-header .gh-button { height: 40px; padding: 0 12px; font-size: 15px; }
+  .gh-header .gh-menu-button, .gh-header .gh-icon-button, .gh-header .gh-search { width: 40px; height: 40px; }
+  /* A halo sized off viewport width collapses on a phone, leaving the wordmark
+     stranded in black. Narrow screens get a proportionally wider one, turned
+     upright so it fills a portrait screen — and sized explicitly rather than off
+     the `max(vw, vh)` base, which on a tall phone would blur a 1100px surface
+     for no visual gain. */
+  .gas-1 { width: 118vw; aspect-ratio: .95; }
+  .gas-2 { width: 96vw; aspect-ratio: .9; }
+  .gas-3 { width: 132vw; aspect-ratio: 1.05; }
+  .hero-shade { width: 96vw; aspect-ratio: 1.5; }
+  /* With less to look at, the dot matrix starts reading as content — pull it back. */
+  .hero-pattern {
+    background-image:
+      radial-gradient(var(--dot) 1px, transparent 1px),
+      repeating-radial-gradient(circle at 50% 50%, transparent 0 48px, var(--ring) 48px 49px);
+    background-size: 26px 26px, 100% 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .gas, .hero-plane, .page-aura::before { animation: none !important; }
+  *, *::before, *::after { transition-duration: .01ms !important; }
+}

@@ -1,0 +1,21 @@
+# Deny the whole context, then re-admit exactly what the build needs.
+# Previously only `.env.local` was denied, so `.env`, `.env.production` and any
+# other local secret file would have been copied into the builder layer.
+*
+
+!package.json
+!package-lock.json
+!next.config.ts
+!tsconfig.json
+!next-env.d.ts
+!app/
+!components/
+!lib/
+!public/
+
+# Re-denied inside the allowed directories.
+**/.env*
+**/node_modules/
+**/.next/
+**/*.tsbuildinfo
+**/*.log

@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lura
+      POSTGRES_USER: lura
+      POSTGRES_PASSWORD: lura
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lura -d lura"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+  api:
+    build: ./apps/api
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+      DATABASE_URL: postgresql+asyncpg://lura:lura@postgres:5432/lura
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001/}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MAX_ACTIVE_SESSIONS: ${MAX_ACTIVE_SESSIONS:-10}
+      REQUEST_MAX_BYTES: ${REQUEST_MAX_BYTES:-65536}
+      TRUSTED_PROXY_HOSTS: ${TRUSTED_PROXY_HOSTS:-}
+      LOGIN_IP_LIMIT: ${LOGIN_IP_LIMIT:-20}
+      LOGIN_ACCOUNT_LIMIT: ${LOGIN_ACCOUNT_LIMIT:-10}
+      LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-900}
+      LOGIN_CAPTCHA_THRESHOLD: ${LOGIN_CAPTCHA_THRESHOLD:-3}
+      LOGIN_LOCK_THRESHOLD: ${LOGIN_LOCK_THRESHOLD:-5}
+      LOGIN_LOCK_SECONDS: ${LOGIN_LOCK_SECONDS:-300}
+      REGISTER_IP_LIMIT: ${REGISTER_IP_LIMIT:-5}
+      REGISTER_ACCOUNT_LIMIT: ${REGISTER_ACCOUNT_LIMIT:-3}
+      PASSWORD_RESET_IP_LIMIT: ${PASSWORD_RESET_IP_LIMIT:-5}
+      PASSWORD_RESET_ACCOUNT_LIMIT: ${PASSWORD_RESET_ACCOUNT_LIMIT:-3}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-disabled}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/api/v1/auth/oauth/google/callback}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_RUNTIME_TIMEOUT_SECONDS: ${AI_RUNTIME_TIMEOUT_SECONDS:-60}
+      AI_RUNTIME_MAX_HISTORY_MESSAGES: ${AI_RUNTIME_MAX_HISTORY_MESSAGES:-24}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Bound to the loopback interface so a local stack holding real credentials
+    # is not reachable from the rest of the network. Drop the "127.0.0.1:"
+    # prefix only when another device genuinely has to reach it.
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        # Baked into the browser bundle at build time. Both are public values.
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL must be set}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?SUPABASE_PUBLISHABLE_KEY must be set}
+        NEXT_PUBLIC_SITE_URL: ${AUTH_APP_URL:-http://localhost:3001}
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PORT: "3001"
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3001:3001"
+
+volumes:
+  postgres_data:
+  redis_data:
