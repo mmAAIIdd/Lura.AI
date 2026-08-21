@@ -71,9 +71,14 @@ Two settings are dashboard-only and `vercel.json` cannot carry them:
 
 - **Root Directory** must stay empty (the repository root). Pointing it at
   `apps/web` makes Vercel ignore this file entirely.
-- **`VITE_AUTH_APP_URL`** must hold the origin the auth app answers on. It
-  falls back to `http://localhost:3001`, which is correct locally and sends
-  deployed visitors to their own machine when they press *Log in*.
+- **`VITE_AUTH_APP_URL`** must hold the origin the auth app answers on. The
+  `http://localhost:3001` default applies only when the site is itself served
+  from localhost, so a deployment without this set does not send visitors to
+  their own machine; `/login` and `/register` explain that accounts are not
+  connected yet. Add the variable and redeploy once `apps/web` is up. Setting
+  it to this site's own origin, or adding it with no value at all, is treated
+  the same as leaving it out — pointing the auth link back at the marketing
+  site is a reload loop, not a redirect.
 
 `apps/web/` is a second Vercel project — import the same repository again with
 Root Directory `apps/web` and give it `NEXT_PUBLIC_SUPABASE_URL` and

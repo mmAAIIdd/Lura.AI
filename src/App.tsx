@@ -7,7 +7,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import { MarketingLayout } from './components/layout/MarketingLayout';
-import { authUrl, type AuthPath } from '@/lib/authUrl';
+import { authAppBase, authUrl, type AuthPath } from '@/lib/authUrl';
 
 /* The landing is the entry point for nearly every visit, so it stays in the
    first chunk. The other three pages are long documents no first-time visitor
@@ -19,13 +19,20 @@ const Platform = React.lazy(() => import('./pages/marketing/Platform'));
 const Capabilities = React.lazy(() => import('./pages/marketing/Capabilities'));
 const Docs = React.lazy(() => import('./pages/marketing/Docs'));
 const NotFound = React.lazy(() => import('./pages/marketing/NotFound'));
+const AuthUnavailable = React.lazy(() => import('./pages/marketing/AuthUnavailable'));
 
 function AuthRedirect({ path }: { path: AuthPath }) {
-  React.useEffect(() => {
-    window.location.assign(authUrl(path));
-  }, [path]);
+  /* Only leave when there is somewhere else to go. With no auth app configured
+     authUrl() hands back this same route, and assigning it reloads the page into
+     this component again — which is what left the sign-in link spinning
+     forever. */
+  const target = authAppBase() ? authUrl(path) : null;
 
-  return null;
+  React.useEffect(() => {
+    if (target) window.location.assign(target);
+  }, [target]);
+
+  return target ? null : <AuthUnavailable />;
 }
 
 export default function App() {
