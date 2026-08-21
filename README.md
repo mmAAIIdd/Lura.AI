@@ -54,6 +54,32 @@ npx next dev --port 3002
 
 Read [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) for the data model, security boundaries, configuration, and available endpoints.
 
+## Deploy on Vercel
+
+`vercel.json` at the root deploys `src/` — the marketing site. It pins the
+build (`vite build` into `dist/`) so the result does not depend on dashboard
+settings, and rewrites every path to `/index.html`.
+
+That rewrite is the part worth understanding. The site routes on the client
+with react-router, so `dist/` holds one HTML file. Without the rewrite, only
+`/` resolves; opening `/platform`, `/docs`, or a shared link to any other page
+misses the filesystem and Vercel answers with its own `404: NOT_FOUND` page.
+Static files are matched before rewrites, so `/assets/*` keeps serving the
+real bundles.
+
+Two settings are dashboard-only and `vercel.json` cannot carry them:
+
+- **Root Directory** must stay empty (the repository root). Pointing it at
+  `apps/web` makes Vercel ignore this file entirely.
+- **`VITE_AUTH_APP_URL`** must hold the origin the auth app answers on. It
+  falls back to `http://localhost:3001`, which is correct locally and sends
+  deployed visitors to their own machine when they press *Log in*.
+
+`apps/web/` is a second Vercel project — import the same repository again with
+Root Directory `apps/web` and give it `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. `apps/api/` is a container and does not
+run on Vercel; it needs a host that runs Docker.
+
 ## Current application foundation
 
 Creating an account and signing in are separate screens. `/register` collects a name, address and password and sends a confirmation letter; `/login` only signs an existing account in. Following the emailed link lands on `/auth/confirm`, which establishes the session and opens `/workspace`. The current backend provides authentication, project isolation, server-side provider access, persistent conversations, component catalogs, rate limiting, and audit events.
