@@ -39,12 +39,11 @@ export function authAppBase(): string | null {
 }
 
 /**
- * Build a link into the auth app, carrying the theme the visitor is looking at.
+ * Build a link into the auth app.
  *
- * The auth screens run on a separate origin, so they cannot read the choice
- * stored here — without the parameter, someone who switched to light lands on a
- * black page. Read at render time rather than cached: toggling the theme
- * re-renders the layout, and every caller sits inside it.
+ * The theme still travels in the query string even though this site has only a
+ * dark one: the auth app runs on a separate origin and cannot read anything
+ * stored here, and without the parameter it falls back to its own default.
  *
  * With no auth app configured this returns the in-app route, which explains the
  * situation instead of bouncing the visitor at a page that cannot answer.
@@ -53,6 +52,5 @@ export function authUrl(path: AuthPath) {
   const base = authAppBase();
   if (!base) return path;
 
-  const theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-  return `${base}${path}?theme=${theme}`;
+  return `${base}${path}?theme=dark`;
 }

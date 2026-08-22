@@ -1,9 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { Menu, Moon, Search, Sun, X } from 'lucide-react';
+import { Menu, Search, X } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { authUrl } from '@/lib/authUrl';
-import { useTheme } from '@/lib/useTheme';
 
 /* The overlay carries the whole FAQ text and is closed on arrival, so none of
    it belongs in the chunk that has to render the first screen. */
@@ -30,7 +29,6 @@ export function MarketingLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const location = useLocation();
-  const { theme, toggle } = useTheme();
   const isLanding = location.pathname === '/';
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
@@ -82,18 +80,6 @@ export function MarketingLayout() {
             </button>
             <button className="gh-menu-button sm:hidden" onClick={() => setSearchOpen(true)} aria-label="Открыть вопросы">
               <Search className="h-[22px] w-[22px]" />
-            </button>
-
-            <button
-              className="gh-icon-button"
-              onClick={toggle}
-              aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
-              aria-pressed={theme === 'light'}
-              title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-            >
-              {theme === 'dark'
-                ? <Sun className="h-[22px] w-[22px]" />
-                : <Moon className="h-[22px] w-[22px]" />}
             </button>
 
             <a href={authUrl('/login')} className="gh-button gh-button-ghost">Вход</a>
