@@ -61,8 +61,6 @@
     /* The perspective stage reads as depth, not as content. Halved from .2,
        where the grid lines were legible enough to be scanned. */
     --stage-line: rgba(255, 255, 255, .1);
-    --dot: rgba(255, 255, 255, .045);
-    --ring: rgba(255, 255, 255, .022);
     --shade: rgba(0, 0, 0, .44);
     --shade-mid: rgba(0, 0, 0, .14);
     --vignette: rgba(0, 0, 0, .92);
@@ -273,13 +271,6 @@
             mask-image: linear-gradient(to bottom, #000 3%, transparent 72%);
   }
 
-  /* Fine dot matrix over the stage — texture at a scale the grid does not cover. */
-  .hero-pattern {
-    position: absolute; inset: 0; z-index: -5; pointer-events: none;
-    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-    background-size: 30px 30px;
-  }
-
   /* The glow is a gas, not a fan of shafts: full-spectrum colour spread evenly
      around the ring, then blurred far past the point where any edge survives.
      It is sized to sit under the whole headline, not to ring it — the clear
@@ -404,13 +395,6 @@
        page header — while holding a blurred layer this size permanently
        composited on all three subpages. The bloom is static now, and identical
        to look at. */
-  }
-  .page-aura::after {
-    position: absolute; inset: 0; content: "";
-    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-    background-size: 30px 30px;
-    -webkit-mask-image: linear-gradient(to bottom, #000, transparent 74%);
-            mask-image: linear-gradient(to bottom, #000, transparent 74%);
   }
   /* Grain keeps the large gradients from banding on wide gamut displays. */
   /* Composited plainly rather than blended: overlay on a layer this size,
@@ -635,13 +619,6 @@
   .gas-2 { width: 77vw; aspect-ratio: .9; }
   .gas-3 { width: 106vw; aspect-ratio: 1.05; }
   .hero-shade { width: 96vw; aspect-ratio: 1.5; }
-  /* With less to look at, the dot matrix starts reading as content — pull it back. */
-  .hero-pattern {
-    background-image:
-      radial-gradient(var(--dot) 1px, transparent 1px),
-      repeating-radial-gradient(circle at 50% 50%, transparent 0 48px, var(--ring) 48px 49px);
-    background-size: 26px 26px, 100% 100%;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

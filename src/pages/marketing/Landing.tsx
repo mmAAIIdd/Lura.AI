@@ -41,7 +41,6 @@ export default function Landing() {
           <div className="hero-plane hero-roof" />
           <div className="hero-plane hero-floor" />
         </div>
-        <div className="hero-pattern" aria-hidden="true" />
 
         <div className="gas gas-1" aria-hidden="true" />
         <div className="gas gas-2" aria-hidden="true" />
