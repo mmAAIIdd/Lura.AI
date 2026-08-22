@@ -274,7 +274,6 @@ button, input, select, textarea { font: inherit; }
      is a token here for the same reason it is one on the marketing site. */
   --gas-blend: screen;
   --gas-boost: 1;
-  --dot: rgba(255, 255, 255, .07);
   --headline-from: #ffffff;
   --headline-mid: #f5f6f8;
   --headline-to: #e4e5ea;
@@ -322,7 +321,6 @@ button, input, select, textarea { font: inherit; }
   --solid-hover: #26272d;
   --gas-blend: multiply;
   --gas-boost: 1.05;
-  --dot: rgba(0, 0, 0, .075);
   --headline-from: #08080b;
   --headline-mid: #1c1d22;
   --headline-to: #34353c;
@@ -375,17 +373,6 @@ button, input, select, textarea { font: inherit; }
   translate: -50% -50%;
   pointer-events: none;
   background: radial-gradient(ellipse, var(--shade) 0%, var(--shade-mid) 46%, transparent 74%);
-}
-
-.auth-dots {
-  position: absolute;
-  inset: 0;
-  z-index: -3;
-  pointer-events: none;
-  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-  background-size: 30px 30px;
-  -webkit-mask-image: radial-gradient(ellipse 78% 68% at 50% 46%, #000 28%, transparent 100%);
-          mask-image: radial-gradient(ellipse 78% 68% at 50% 46%, #000 28%, transparent 100%);
 }
 
 .auth-page .auth-hero { width: min(100%, 640px); }
@@ -475,6 +462,17 @@ button, input, select, textarea { font: inherit; }
 }
 .auth-page .button-primary { color: var(--solid-ink); background: var(--solid); box-shadow: var(--shadow); }
 .auth-page .button-primary:hover:not(:disabled) { background: var(--solid-hover); }
+/* Google supplies the mark and asks that it keep its own colours, so the button
+   is a light surface rather than the inverted primary — a four-colour glyph on
+   near-black reads as a sticker. */
+.auth-page .button-google {
+  width: 100%;
+  color: #1f1f1f;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, .82);
+  box-shadow: var(--shadow);
+}
+.auth-page .button-google:hover:not(:disabled) { background: #ececee; }
 .auth-page .button-secondary {
   color: var(--text);
   border: 1px solid var(--line-strong);

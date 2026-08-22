@@ -5,14 +5,10 @@ import { getLoginPath } from "@/lib/api";
 import { isSupabaseConfigured, readSupabaseConfig } from "@/lib/supabase/config";
 
 /** Screens a signed-out visitor is allowed to reach. */
-const PUBLIC_PREFIXES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth"];
+const PUBLIC_PREFIXES = ["/login", "/register", "/auth"];
 
-/**
- * Screens that make no sense once signed in. `/reset-password` is deliberately
- * absent: it runs on the short-lived recovery session, so the visitor there is
- * signed in and must stay on the page.
- */
-const SIGNED_OUT_ONLY_PREFIXES = ["/login", "/register", "/forgot-password"];
+/** Screens that make no sense once signed in. */
+const SIGNED_OUT_ONLY_PREFIXES = ["/login", "/register"];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

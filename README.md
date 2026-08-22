@@ -104,13 +104,30 @@ Creating an account and signing in are separate screens. `/register` collects a 
 
 Open a project to create persistent conversations. Set one of `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY` in `.env` to activate the corresponding project model. Keys are not sent to the browser. Release ingestion, feedback clustering, metric comparison, RAG retrieval, and evidence-backed analysis remain product modules to implement; the marketing copy does not present them as already available integrations.
 
-## Google OAuth setup
+## Google sign-in
 
-1. In Google Cloud Console create an OAuth 2.0 Client ID of type **Web application**.
-2. Add `http://localhost:8000/api/v1/auth/oauth/google/callback` as an authorized redirect URI for local development.
-3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`, then restart the `api` container.
+Google is the only way in. `apps/web` has no password form: `/login` offers one
+button, a first sign-in creates the account, and `/register` redirects there
+because with OAuth the two are the same action.
 
-The Google sign-in button remains inactive until both backend values are present. Do not use `NEXT_PUBLIC_` or `VITE_` prefixes for either secret.
+The exchange runs through Supabase Auth, not through `apps/api` — which is why
+sign-in works with the backend offline. Two dashboards have to agree:
+
+1. **Google Cloud Console** — create an OAuth 2.0 Client ID of type **Web
+   application**, and add Supabase's callback as an authorized redirect URI:
+   `https://<project-ref>.supabase.co/auth/v1/callback`. This is the only
+   redirect Google needs; the app's own URL never appears here.
+2. **Supabase → Authentication → Providers → Google** — enable it and paste the
+   client ID and secret. The secret stays in Supabase and never reaches a
+   `.env` file or a browser bundle.
+
+Until the provider is enabled, `/login` says so instead of showing the button:
+`signInWithOAuth` does not check that a provider exists, it just hands the
+browser to an authorize URL that answers with raw JSON, so the screen asks the
+project what it has enabled before offering to use it.
+
+The `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env` belong to
+`apps/api`'s own OAuth endpoints and are unrelated to the sign-in above.
 
 ## CAPTCHA setup
 

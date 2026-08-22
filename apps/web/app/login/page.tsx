@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 
-import { LoginForm } from "@/components/auth-forms";
+import { GoogleSignIn } from "@/components/google-sign-in";
 
 export default function LoginPage() {
-  return <Suspense fallback={null}><LoginForm /></Suspense>;
+  return <Suspense fallback={null}><GoogleSignIn /></Suspense>;
 }
