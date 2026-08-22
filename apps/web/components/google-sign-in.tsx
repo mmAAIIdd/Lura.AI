@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AuthShell } from "@/components/auth-shell";
 import { getSafeNextPath } from "@/lib/api";
@@ -23,6 +23,39 @@ function GoogleMark() {
 }
 
 /**
+ * Three states worth telling apart, because each has a different fix and they
+ * are indistinguishable from the button alone.
+ */
+type Availability = "unknown" | "ready" | "provider-off" | "unreachable";
+
+const BLOCKED_MESSAGE: Record<string, string> = {
+  "provider-off":
+    "Вход через Google не подключён к этому проекту Supabase. Включите провайдера в Authentication → Providers.",
+  unreachable:
+    "Supabase не принял ключ проекта или недоступен. Проверьте NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY в настройках развёртывания.",
+};
+
+/**
+ * Asks the project what it has enabled.
+ *
+ * A rejected key and a disabled provider both leave the button useless, but
+ * they are different problems: one is a wrong value in the deployment, the
+ * other a switch in the Supabase dashboard. Reporting them as one thing is how
+ * a truncated key spent an afternoon looking like a Google problem.
+ */
+async function readAvailability(): Promise<Availability> {
+  try {
+    const { url, publishableKey } = readSupabaseConfig();
+    const response = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: publishableKey } });
+    if (!response.ok) return "unreachable";
+    const settings = await response.json();
+    return settings?.external?.google ? "ready" : "provider-off";
+  } catch {
+    return "unreachable";
+  }
+}
+
+/**
  * The whole of signing in. Google is the only provider, so there is no separate
  * registration: a first sign-in creates the account, and every later one finds
  * it by the same address.
@@ -36,28 +69,21 @@ export function GoogleSignIn() {
   const nextPath = getSafeNextPath(params.get("next"));
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [providerOff, setProviderOff] = useState(false);
+  const [availability, setAvailability] = useState<Availability>("unknown");
+  const availabilityRef = useRef<Availability>("unknown");
 
-  /* signInWithOAuth does not check that the provider exists — it builds a URL
-     and hands the browser to it. With Google switched off in the Supabase
-     project, that URL answers with a raw JSON error which the browser then
-     displays as the page. Asking the project what it has enabled turns that
-     dead end into a sentence. */
+  function remember(next: Availability) {
+    availabilityRef.current = next;
+    setAvailability(next);
+  }
+
+  // Answers before anyone reaches for the button, so a project that cannot
+  // sign anyone in says so rather than offering a control that dead-ends.
   useEffect(() => {
     let cancelled = false;
-    try {
-      const { url, publishableKey } = readSupabaseConfig();
-      fetch(url + "/auth/v1/settings", { headers: { apikey: publishableKey } })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((settings) => {
-          if (!cancelled && settings?.external?.google === false) setProviderOff(true);
-        })
-        .catch(() => {
-          // Unreachable settings prove nothing; leave the button up.
-        });
-    } catch {
-      // Missing configuration is reported by the sign-in attempt itself.
-    }
+    void readAvailability().then((result) => {
+      if (!cancelled) remember(result);
+    });
     return () => {
       cancelled = true;
     };
@@ -66,6 +92,21 @@ export function GoogleSignIn() {
   async function startSignIn() {
     setPending(true);
     setError(null);
+
+    // Checked again here rather than trusted from mount: the answer may not
+    // have arrived yet, and signInWithOAuth does not validate anything — it
+    // builds an authorize URL and hands the browser over, so a provider that is
+    // off answers with raw JSON that the browser renders as the page.
+    let state = availabilityRef.current;
+    if (state !== "ready") {
+      state = await readAvailability();
+      remember(state);
+    }
+    if (state !== "ready") {
+      setPending(false);
+      return;
+    }
+
     try {
       const supabase = createClient();
       const { error: signInError } = await supabase.auth.signInWithOAuth({
@@ -84,16 +125,15 @@ export function GoogleSignIn() {
     }
   }
 
+  const blocked = BLOCKED_MESSAGE[availability];
+
   return (
     <AuthShell
       title="Вход в Lura"
       subtitle="Аккаунт создаётся при первом входе — отдельная регистрация не нужна."
     >
-      {providerOff ? (
-        <p className="form-error" role="alert">
-          Вход через Google ещё не подключён к этому проекту Supabase. Включите провайдера
-          в Authentication → Providers, и кнопка заработает.
-        </p>
+      {blocked ? (
+        <p className="form-error" role="alert">{blocked}</p>
       ) : (
         <button className="button button-google" type="button" onClick={startSignIn} disabled={pending} aria-busy={pending}>
           <GoogleMark />
