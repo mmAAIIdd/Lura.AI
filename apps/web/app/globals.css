@@ -504,6 +504,19 @@ button, input, select, textarea { font: inherit; }
 
 .auth-page .form-error,
 .auth-page .form-success { border-radius: 10px; border-style: solid; border-width: 1px; }
+/* Supabase's own words, set apart from ours: monospace and quiet, because it is
+   a diagnostic rather than a message written for the person reading it. */
+.auth-page .error-detail {
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--raise);
+  color: var(--muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  word-break: break-word;
+}
 .auth-page .form-error { color: var(--danger-ink); background: var(--danger-bg); border-color: var(--danger-line); }
 .auth-page .form-success { color: var(--ok-ink); background: var(--ok-bg); border-color: var(--ok-line); }
 
