@@ -4,14 +4,20 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { LuraLogo } from "@/components/lura-logo";
 import { ApiError, authApi, getLoginPath, type User, type UserSession } from "@/lib/api";
+
+const NAVIGATION = [
+  ["/settings/account", "Аккаунт"],
+  ["/settings/security", "Безопасность"],
+] as const;
 
 export function AccountScreen({ section }: { section: "account" | "security" }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [sessions, setSessions] = useState<UserSession[]>([]);
-  const [status, setStatus] = useState("Loading your workspace...");
+  const [status, setStatus] = useState("Загружаем аккаунт...");
   const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,42 +56,77 @@ export function AccountScreen({ section }: { section: "account" | "security" }) 
       }
       setSessions((currentSessions) => currentSessions.filter(({ id }) => id !== session.id));
     } catch (error) {
-      setSessionError(error instanceof Error ? error.message : "Unable to revoke the session.");
+      setSessionError(error instanceof Error ? error.message : "Не удалось завершить сессию.");
     }
   }
 
   if (!user) {
-    return <main className="app-shell"><p className="status-message">{status} <Link href="/login">Sign in</Link></p></main>;
+    return (
+      <main className="settings-page settings-loading">
+        <p>{status} <Link href="/login">Войти</Link></p>
+      </main>
+    );
   }
 
   const title = section === "account" ? "Аккаунт" : "Безопасность";
+
   return (
-    <main className="app-shell">
-      <header className="app-header"><Link href="/workspace" className="brand"><span className="brand-mark">L</span>Lura</Link><button className="button button-quiet" onClick={logout}>Sign out</button></header>
-      <div className="app-layout">
-        <nav className="app-nav" aria-label="Account navigation"><Link href="/workspace">Рабочее пространство</Link><Link href="/settings/account">Аккаунт</Link><Link href="/settings/security">Безопасность</Link></nav>
-        <section className="content-panel">
-          <p className="eyebrow">{title}</p>
+    <main className="settings-page">
+      <header className="settings-header">
+        <Link href="/workspace" className="settings-brand" aria-label="Lura — в рабочее пространство">
+          <LuraLogo />
+          <span>Lura</span>
+        </Link>
+        <div className="settings-header-actions">
+          <Link href="/workspace" className="settings-workspace-link">Рабочее пространство</Link>
+          <button className="settings-signout" onClick={logout}>Выйти</button>
+        </div>
+      </header>
+
+      <div className="settings-layout">
+        <aside className="settings-sidebar">
+          <p>Настройки</p>
+          <nav aria-label="Настройки аккаунта">
+            {NAVIGATION.map(([href, label]) => (
+              <Link key={href} href={href} className={pathname === href ? "is-active" : undefined}>{label}</Link>
+            ))}
+          </nav>
+        </aside>
+
+        <section className="settings-content">
+          <p className="settings-kicker">Lura</p>
           <h1>{title}</h1>
-          {section === "account" && <dl className="detail-list"><div><dt>Name</dt><dd>{user.name}</dd></div><div><dt>Email</dt><dd>{user.email}</dd></div><div><dt>Role</dt><dd>{user.role}</dd></div></dl>}
-          {section === "security" && <>
-            <p>Your account uses server-side sessions. Resetting your password revokes all other active sessions.</p>
-            {sessionError && <p className="form-error" role="alert">{sessionError}</p>}
-            <div className="session-list">
-              {sessions.map((session) => (
-                <article className="session-row" key={session.id}>
-                  <div>
-                    <strong>{session.current ? "This device" : "Active session"}</strong>
-                    <p>{session.user_agent ?? "Unknown browser"}</p>
-                    <small>Last used {new Date(session.last_used_at).toLocaleString()}</small>
-                  </div>
-                  <button className="button button-danger" onClick={() => void revokeSession(session)}>
-                    {session.current ? "Sign out" : "Revoke"}
-                  </button>
-                </article>
-              ))}
-            </div>
-          </>}
+
+          {section === "account" && (
+            <dl className="settings-details">
+              <div><dt>Имя</dt><dd>{user.name}</dd></div>
+              <div><dt>Email</dt><dd>{user.email}</dd></div>
+              <div><dt>Роль</dt><dd>{user.role}</dd></div>
+            </dl>
+          )}
+
+          {section === "security" && (
+            <>
+              <p className="settings-intro">
+                Аккаунт использует серверные сессии. Завершите любую сессию, которую не узнаёте.
+              </p>
+              {sessionError && <p className="form-error" role="alert">{sessionError}</p>}
+              <div className="settings-sessions">
+                {sessions.map((session) => (
+                  <article className="settings-session" key={session.id}>
+                    <div>
+                      <strong>{session.current ? "Это устройство" : "Активная сессия"}</strong>
+                      <p>{session.user_agent ?? "Неизвестный браузер"}</p>
+                      <small>Последняя активность: {new Date(session.last_used_at).toLocaleString("ru-RU")}</small>
+                    </div>
+                    <button className="settings-revoke" onClick={() => void revokeSession(session)}>
+                      {session.current ? "Выйти" : "Завершить"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </div>
     </main>

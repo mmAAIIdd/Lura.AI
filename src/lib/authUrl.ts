@@ -1,4 +1,4 @@
-export type AuthPath = '/login' | '/register';
+export type AuthPath = '/register' | '/workspace';
 
 /* An unset variable and a blank one have to mean the same thing here, which is
    why this cannot use `??`. Vercel hands over an empty string for a variable
