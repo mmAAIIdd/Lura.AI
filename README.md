@@ -28,6 +28,24 @@ Email sign-up and sign-in run on Supabase Auth. Three things have to line up.
 
 Supabase's built-in mail service is rate limited to a couple of messages an hour and is not meant for production. Configure custom SMTP under **Authentication -> Emails** — the `RESEND_API_KEY` already in `.env` is a natural fit — before real users arrive.
 
+## Lura Studio — рабочее пространство с агентом
+
+`/studio` в приложении `apps/web` — рабочее пространство, где агент разбирает продукт по данным команды. Оно не зависит от `apps/api`: ни Postgres, ни Redis, ни Python ему не нужны. Всё состояние лежит в папке `.lura-studio` рядом с приложением, а единственная внешняя зависимость — Gemini API.
+
+```powershell
+# apps/web/.env.local
+GEMINI_API_KEY=<ключ из Google AI Studio>
+
+cd apps/web
+npm run dev     # http://localhost:3001/studio
+```
+
+**Как это устроено.** Слева — загрузка документов и переключатель двух режимов вывода: «Отчёты» (разбор по данным с поиском и доказательством) и «Обновления» (отчёты по релизам). Один документ помечается как документ о бизнесе: он целиком уходит в системную инструкцию на каждом запросе, поэтому агент всегда знает, чей продукт разбирает. Остальные документы режутся на фрагменты, индексируются эмбеддингами `gemini-embedding-001` и ищутся косинусной близостью; если эмбеддинги недоступны, поиск переключается на ключевые слова, а не отключается.
+
+**Пайплайн.** Агент отвечает строго шестью разделами — что изменилось, что произошло после, какие проблемы найдены, почему это могло произойти, что стоит сделать, как проверить результат. Сначала факты, потом анализ, потом гипотезы и только затем рекомендации. Инструменты у него три: `search_documents`, `web_search`, `fetch_url`.
+
+**Поиск в интернете.** `STUDIO_SEARCH=auto` пробует провайдеров по порядку: Brave (по `BRAVE_API_KEY`), Tavily (по `TAVILY_API_KEY`), googleSearch у Gemini (включается вместе с биллингом проекта) и DuckDuckGo без ключа. Если не отвечает никто, агент не выдумывает ссылки: он пишет в отчёте, что внешние источники собрать не удалось.
+
 ## Run locally
 
 ```powershell
