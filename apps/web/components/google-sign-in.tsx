@@ -64,7 +64,7 @@ async function readAvailability(): Promise<Availability> {
  * route exchanges for the session cookies — the same path an emailed link used
  * to take, so nothing downstream had to change.
  */
-export function GoogleSignIn() {
+export function GoogleSignIn({ mode = "login" }: { mode?: "login" | "register" }) {
   const params = useSearchParams();
   const nextPath = getSafeNextPath(params.get("next"));
   const [error, setError] = useState<string | null>(null);
@@ -129,8 +129,9 @@ export function GoogleSignIn() {
 
   return (
     <AuthShell
-      title="Начните с Lura"
-      subtitle="Твой менеджер для бизнеса"
+      variant={mode}
+      title={mode === "register" ? "Начните с Lura" : "Вход в Lura"}
+      subtitle={mode === "register" ? "Твой менеджер для бизнеса" : "Продолжите работу со своими проектами."}
     >
       {blocked ? (
         <p className="form-error" role="alert">{blocked}</p>
