@@ -18,7 +18,7 @@ export function AuthShell({ title, subtitle, children, variant = "login" }: Auth
   const cooperationUrl = home ? `${home}/cooperation` : undefined;
 
   return (
-    <div className={`auth-page auth-page-register auth-page-${variant}`}>
+    <div className={`auth-page auth-page-${variant}`}>
       <header className="auth-header">
         {home ? (
           <a href={home} className="brand auth-brand" aria-label="Lura — на главную">
@@ -33,9 +33,9 @@ export function AuthShell({ title, subtitle, children, variant = "login" }: Auth
         )}
 
         <nav className="auth-nav" aria-label="Основная навигация">
-          <a href={documentationUrl} aria-disabled={!documentationUrl}>Документация</a>
           <a href={capabilitiesUrl} aria-disabled={!capabilitiesUrl}>Возможности</a>
           <a href={cooperationUrl} aria-disabled={!cooperationUrl}>Сотрудничество</a>
+          <a href={documentationUrl} aria-disabled={!documentationUrl}>Документация</a>
         </nav>
       </header>
 
@@ -62,6 +62,33 @@ export function AuthShell({ title, subtitle, children, variant = "login" }: Auth
               </p>
             )}
           </div>
+
+          {/* Первый экран должен отвечать на «что я с этого получу», иначе
+              кнопка входа висит без причины. Только на регистрации: на экране
+              ошибки этот текст отвлекал бы от того, что делать дальше. */}
+          {variant === "register" ? (
+            <section className="auth-pitch" aria-label="О продукте">
+              <p className="auth-pitch-lead">
+                Вы выпускаете обновления, а клиенты отвечают — отзывами, оценками, тем, как
+                они пользуются продуктом. Lura слушает этот ответ за вас и показывает, что из
+                сделанного сработало.
+              </p>
+              <ul className="auth-pitch-list">
+                <li>
+                  <strong>Видно, что изменилось после релиза</strong>
+                  <span>Не «выкатили и надеемся»: где клиенту стало легче, а где вы задели живое.</span>
+                </li>
+                <li>
+                  <strong>Сотни отзывов — в несколько понятных тем</strong>
+                  <span>Люди пишут об одном и том же разными словами. Lura собирает это в проблемы и показывает, какие из них растут.</span>
+                </li>
+                <li>
+                  <strong>Понятно, за что браться завтра</strong>
+                  <span>Факт, догадка и рекомендация не свалены в кучу — решение остаётся за вами, но уже с опорой.</span>
+                </li>
+              </ul>
+            </section>
+          ) : null}
         </section>
 
         <figure className="auth-art">

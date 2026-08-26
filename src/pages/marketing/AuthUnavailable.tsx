@@ -11,8 +11,10 @@ export default function AuthUnavailable() {
           Приложение авторизации не настроено для этого адреса. Публичные страницы и документация доступны без входа.
         </p>
         <div className="public-cta-row">
-          <Link to="/" className="public-button public-button-primary public-button-large">
-            <ArrowLeft aria-hidden="true" /> На главную
+          {/* Не на «/»: корень ведёт на регистрацию, которая в этом состоянии
+              возвращает сюда же. Ссылка должна вести туда, что работает. */}
+          <Link to="/capabilities" className="public-button public-button-primary public-button-large">
+            <ArrowLeft aria-hidden="true" /> Возможности
           </Link>
           <Link to="/docs" className="public-button public-button-outline public-button-large">Документация</Link>
         </div>

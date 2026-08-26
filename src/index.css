@@ -5,682 +5,81 @@
      system offers meant Segoe UI Variable on most Windows machines — a softer,
      rounder face with looser fitting — so the page came out at a different
      weight and width on every visitor's screen. One face renders the same
-     everywhere, and it is the sharper of the two. */
-  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter Variable", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+     everywhere, headings included: the previous serif stack started with
+     "Iowan Old Style", which ships on macOS and nowhere else, so the same page
+     had two different personalities depending on who opened it. */
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, monospace;
 }
 
 @layer base {
-  /* The site is dark, full stop — there is no toggle and no second palette
-     to switch to, so nothing stamps an attribute on the root any more.
-     Every token here is read somewhere below — check before adding one back. */
+  /* Белый сайт, одна тема. Переключателя нет и второй палитры нет — ничего не
+     ставит атрибут на корень и ничего не переопределяет эти токены ниже. */
   :root {
-    color-scheme: dark;
-    --bg: #000000;
-    --bg-raised: #050506;
-    --line: rgba(255, 255, 255, 0.09);
-    --line-strong: rgba(255, 255, 255, 0.18);
-    --text: #f4f4f6;
-    --muted: #8e9099;
-    --muted-soft: #7c7e88;
-    --accent: #d8d9de;
-
-    /* Surfaces that sit on top of the page rather than in it. */
-    --panel: #0a0a0c;
-    --raise: rgba(255, 255, 255, .03);
-    --raise-hover: rgba(255, 255, 255, .07);
-    --card-top: rgba(255, 255, 255, .045);
-    --card-bottom: rgba(255, 255, 255, .015);
-    --shadow: 0 18px 44px rgba(0, 0, 0, .6);
-
-    /* Inset surfaces you can type into. Kept apart from --raise, which dresses
-       raised controls: a field has to sit below the bar, not on it. */
-    --field: rgba(255, 255, 255, .05);
-    --field-line-hover: rgba(255, 255, 255, .3);
-
-    /* The unlit arcs of the halo. Page-coloured rather than `transparent`: the
-       layer composites plainly, so a gap the colour of the ground is
-       indistinguishable from a hole — and an alpha ramp inside a 30px-blurred
-       gradient this large cost the hero ten frames a second. */
-    --gas-void: #050506;
-
-    /* Inverted controls: solid button, and the wordmark chip in the bar. */
-    --solid: #ffffff;
-    --solid-ink: #000000;
-    --solid-hover: #e3e3e6;
-
-    /* Hero staging. The cloud is additive on black and subtractive on white,
-       so the blend mode is a token rather than a hard-coded value. */
-    --gas-blend: screen;
-    /* Every halo opacity is scaled by this, so the whole decoration dims from
-       one place. Below 1 on purpose: the headline and the CTA are what the
-       first screen is for, and at full strength the colour was competing with
-       them rather than sitting behind them. */
-    --gas-boost: .78;
-    /* The perspective stage reads as depth, not as content. Halved from .2,
-       where the grid lines were legible enough to be scanned. */
-    --stage-line: rgba(255, 255, 255, .1);
-    --shade: rgba(0, 0, 0, .44);
-    --shade-mid: rgba(0, 0, 0, .14);
-    --vignette: rgba(0, 0, 0, .92);
-    --scrim: rgba(0, 0, 0, .78);
-    --headline-from: #ffffff;
-
-    /* Single source of truth: the hero sizes itself against this, so the bar and
-       the first screen can never drift apart. */
-    --header-h: 87px;
-    background: var(--bg);
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-soft: #fafbfc;
+    --line: #e4e6ea;
+    --line-strong: #cfd3da;
+    --text: #111318;
+    --muted: #5f646d;
+    --accent: #183b73;
+    /* Тёмно-синий знака — из макета осьминога. */
+    --brand: #1b2a5e;
+    --header-h: 96px;
   }
-  html { scroll-behavior: smooth; }
+
+  * { border-color: var(--line); }
+
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
   body {
-    min-width: 320px;
     margin: 0;
-    background: var(--bg);
     color: var(--text);
+    background: var(--bg);
     font-family: var(--font-sans);
-    /* A whole step on the weight axis. 450 sat between two masters and rendered
-       as a softened 400 rather than as its own weight. */
-    font-weight: 400;
-    /* Let the optical-size axis do its job: small text opens up, large text
-       tightens. Contextual alternates and proportional figures are on for the
-       same reason Apple ships them — text set in running copy, not in a table. */
-    font-optical-sizing: auto;
-    font-feature-settings: "calt" 1, "liga" 1, "pnum" 1, "kern" 1;
-    text-rendering: optimizeLegibility;
+    font-size: 16px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
   }
-  /* Apple tracks display sizes tighter as they grow; a single value across the
-     scale is what makes large headings look loose and small ones look cramped. */
-  h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 640; letter-spacing: -.022em; }
-  h1 { letter-spacing: -.032em; }
-  /* Lining, tabular figures wherever numbers are meant to be compared. */
-  code, kbd, samp, pre { font-feature-settings: "tnum" 1, "zero" 1; }
-  button, input, select, textarea { font: inherit; }
-  a, button { -webkit-tap-highlight-color: transparent; }
-  ::selection { background: var(--line-strong); color: var(--text); }
 
-  /* Only the flat surfaces cross-fade when the theme flips. The hero's blended
-     layers are excluded: transitioning a blend mode mid-flight muddies them. */
-  body, .site-shell, .gh-header, .card, .search-panel, .section, .site-footer {
-    transition: background-color .28s ease, border-color .28s ease, color .28s ease;
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -.03em;
+    text-wrap: balance;
   }
+
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; }
+  img, svg { display: block; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Единственное движение на сайте — мгновенный отклик на курсор. Ни въездов,
+     ни параллакса, ни бесконечных петель: страница стоит на месте. */
+  a, button { transition: color .12s ease, background-color .12s ease, border-color .12s ease; }
+
   @media (prefers-reduced-motion: reduce) {
-    body, .site-shell, .gh-header, .card, .search-panel, .section, .site-footer { transition: none; }
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { transition-duration: .01ms !important; }
   }
 }
 
-@layer components {
-  .site-shell { display: flex; min-height: 100vh; flex-direction: column; overflow-x: hidden; background: var(--bg); }
-  .site-container { width: min(100% - 40px, 1280px); margin-inline: auto; }
-  /* Reserves the space a lazily loaded route is about to occupy. */
-  .route-fallback { min-height: calc(100vh - var(--header-h)); }
+/* ---------- Каркас ---------- */
+.site-shell { display: flex; flex-direction: column; min-height: 100svh; }
+.site-container { width: min(100% - 48px, 1180px); margin-inline: auto; }
+.public-site { overflow-x: clip; }
+.route-fallback { min-height: 60svh; }
 
-  /* ---------- Header ---------- */
-  .gh-header {
-    position: sticky; top: 0; z-index: 60;
-    border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
-    backdrop-filter: blur(14px) saturate(140%);
-  }
-  .gh-header-inner { display: flex; height: var(--header-h); align-items: center; gap: 31px; }
-  .gh-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
-  .gh-brand-mark {
-    display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px;
-    background: var(--solid); color: var(--solid-ink); font-size: 14px; font-weight: 900;
-  }
-  /* The three sections are the whole navigation, so they stay in the bar as long
-     as they fit rather than hiding behind a burger on ordinary laptop widths. */
-  .gh-nav { display: none; align-items: center; gap: 2px; }
-  @media (min-width: 1000px) { .gh-nav { display: flex; } }
-  .gh-nav-link {
-    position: relative; padding: 7px 10px; border-radius: 7px;
-    color: var(--muted); font-size: 14px; font-weight: 600; white-space: nowrap;
-    transition: color .16s ease, background .16s ease;
-  }
-  .gh-nav-link:hover { color: var(--text); background: var(--raise-hover); }
-  .gh-nav-link-active { color: var(--text); }
-  .gh-nav-link-active::after {
-    position: absolute; right: 10px; bottom: -1px; left: 10px; height: 2px; border-radius: 2px;
-    background: var(--text); content: "";
-  }
-  .gh-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-  /* A button that opens a search panel, dressed as the input it stands in for.
-     It was nearly transparent, which left it reading as a third piece of
-     navigation; a field needs a surface distinct from the bar behind it and a
-     text cursor to confirm what it is. */
-  .gh-search {
-    display: flex; align-items: center; gap: 8px; width: clamp(120px, 18vw, 220px); height: 34px; padding: 0 8px 0 11px;
-    border: 1px solid var(--line-strong); border-radius: 7px; background: var(--field);
-    color: var(--muted-soft); font-size: 13px; cursor: text;
-    transition: border-color .16s ease, background .16s ease, color .16s ease;
-  }
-  .gh-search:hover { border-color: var(--field-line-hover); color: var(--muted); }
-  .gh-search:focus-visible { border-color: var(--field-line-hover); }
-  .gh-search span { flex: 1; text-align: left; }
-  .gh-kbd {
-    display: grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px;
-    border: 1px solid var(--line-strong); border-radius: 5px;
-    color: var(--muted-soft); font-family: var(--font-mono); font-size: 11px;
-  }
-  .gh-button {
-    display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 34px; padding: 0 14px;
-    border: 1px solid transparent; border-radius: 7px; font-size: 13px; font-weight: 650; white-space: nowrap;
-    transition: background .16s ease, border-color .16s ease, transform .16s ease, box-shadow .16s ease;
-  }
-  .gh-button-ghost { border-color: var(--line-strong); color: var(--text); background: var(--raise); }
-  .gh-button-ghost:hover { border-color: var(--line-strong); background: var(--raise-hover); }
-  .gh-button-primary { color: var(--solid-ink); background: var(--solid); }
-  .gh-button-primary:hover { background: var(--solid-hover); }
-  .gh-button-lg { height: 48px; padding: 0 24px; border-radius: 10px; font-size: 15px; }
-  /* Square icon control: the burger, and the search button it collapses to on a
-     phone. A rule further down retires the burger once the nav labels fit. */
-  .gh-menu-button {
-    display: grid; width: 34px; height: 34px; place-items: center;
-    border: 1px solid var(--line-strong); border-radius: 7px;
-    color: var(--text); background: transparent; cursor: pointer;
-    transition: background .16s ease, border-color .16s ease, color .16s ease;
-  }
-  .gh-menu-button:hover { background: var(--raise-hover); }
-  @media (min-width: 1000px) { .gh-menu-button { display: none; } }
-  .gh-mobile-nav { border-top: 1px solid var(--line); background: var(--bg-raised); }
-  .gh-mobile-link { display: flex; align-items: center; justify-content: space-between; padding: 13px 4px; border-bottom: 1px solid var(--line); color: var(--text); font-size: 15px; font-weight: 600; }
-
-  /* The bar is set 40% larger than the default control scale. Scoped to the
-     header so `.gh-button` and `.gh-kbd` keep their normal size on the pages
-     below, where they are body-copy controls rather than primary navigation. */
-  .gh-header .gh-brand { gap: 14px; font-size: 25px; }
-  .gh-header .gh-brand-mark { width: 39px; height: 39px; border-radius: 11px; font-size: 20px; }
-  .gh-header .gh-nav { gap: 3px; }
-  .gh-header .gh-nav-link { padding: 10px 14px; border-radius: 10px; font-size: 19px; }
-  .gh-header .gh-nav-link-active::after { right: 14px; left: 14px; height: 3px; }
-  .gh-header .gh-actions { gap: 11px; }
-  .gh-header .gh-search { width: clamp(168px, 25vw, 308px); height: 48px; padding: 0 11px 0 15px; border-radius: 10px; font-size: 18px; }
-  .gh-header .gh-kbd { min-width: 28px; height: 28px; padding: 0 7px; border-radius: 7px; font-size: 15px; }
-  .gh-header .gh-button { height: 48px; padding: 0 20px; gap: 10px; border-radius: 10px; font-size: 18px; }
-  .gh-header .gh-menu-button { width: 48px; height: 48px; border-radius: 10px; }
-  .gh-header .gh-mobile-link { padding: 18px 6px; font-size: 21px; }
-
-  /* At the larger scale the full search field stops fitting alongside three
-     nav labels. Rather than let the bar clip (the shell hides overflow, so it
-     would fail silently), the field folds down to its icon and the gaps tighten. */
-  @media (max-width: 1399px) {
-    .gh-header-inner { gap: 14px; }
-    .gh-header .gh-nav-link { padding: 10px 8px; }
-    .gh-header .gh-button { padding: 0 14px; }
-    .gh-header .gh-search { width: 48px; padding: 0; justify-content: center; }
-    .gh-header .gh-search span, .gh-header .gh-kbd { display: none; }
-  }
-  /* On a phone there is no room for a secondary text button beside the primary
-     one; "Вход" moves into the menu, which now carries the account links too. */
-  @media (max-width: 479px) {
-    .gh-header .gh-actions > .gh-button-ghost { display: none; }
-  }
-  .gh-mobile-section {
-    padding: 12px 4px 4px; color: var(--muted-soft);
-    font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
-  }
-
-  /* ---------- Hero: a coloured gas halo on patterned deep black ---------- */
-  .hero {
-    position: relative; isolation: isolate; overflow: hidden;
-    display: grid; place-items: center;
-    min-height: calc(100vh - var(--header-h));
-    background: var(--bg);
-  }
-
-  /* A real perspective stage: two planes tilted away from the camera, above and
-     below, so the cloud reads as floating in a room rather than pasted on a
-     flat page. The lines drift toward the viewer, which is what sells the depth. */
-  .hero-stage {
-    position: absolute; inset: 0; z-index: -6; overflow: hidden; pointer-events: none;
-    perspective: 700px; perspective-origin: 50% 50%;
-  }
-  /* The plane holds still and carries the mask; the grid travels on the child
-     below. Moving this element instead would drag its mask along with it, and
-     the fade would snap back every time the loop restarted.
-     200vw rather than 340vw: the near edge sits at the perspective origin and
-     everything beyond it converges, so the extra width never reached the screen
-     — it was only surface the compositor had to keep. */
-  .hero-plane {
-    position: absolute; left: 50%; width: 200vw; height: 150vh; margin-left: -100vw;
-    overflow: hidden;
-  }
-  .hero-plane::before {
-    /* One tile of overscan on top, so a full loop never uncovers the edge. */
-    position: absolute; top: -112px; right: 0; bottom: 0; left: 0; content: "";
-    background-image:
-      repeating-linear-gradient(to right, var(--stage-line) 0 1px, transparent 1px 112px),
-      repeating-linear-gradient(to bottom, var(--stage-line) 0 1px, transparent 1px 112px);
-    /* background-position is a paint property: every frame re-rasterised both
-       gradients across the whole surface, twice over, which is what pinned the
-       landing at single-digit frame rates. A transform moves a layer that was
-       rasterised once. */
-    animation: stage-flow 12s linear infinite;
-    will-change: transform;
-  }
-  .hero-floor {
-    bottom: -30vh; transform-origin: 50% 100%; transform: rotateX(76deg);
-    -webkit-mask-image: linear-gradient(to top, #000 3%, transparent 72%);
-            mask-image: linear-gradient(to top, #000 3%, transparent 72%);
-  }
-  .hero-roof {
-    top: -30vh; transform-origin: 50% 0; transform: rotateX(-76deg);
-    -webkit-mask-image: linear-gradient(to bottom, #000 3%, transparent 72%);
-            mask-image: linear-gradient(to bottom, #000 3%, transparent 72%);
-  }
-
-  /* The glow is a gas, not a fan of shafts: full-spectrum colour spread evenly
-     around the ring, then blurred far past the point where any edge survives.
-     It is sized to sit under the whole headline, not to ring it — the clear
-     centre is only wide enough to keep the middle from going solid. */
-  /* z-index -7 puts the cloud under the grid and the dot matrix, which is what
-     lets it drop mix-blend-mode — and dropping it is the largest single win on
-     this page. A blended element cannot be composited on its own: the browser
-     has to re-blend it against everything beneath it for every frame of the
-     animation, and that is what held the landing near 30fps. Screened over a
-     black page and multiplied over a white one both land within a few percent
-     of plain compositing anyway. The grid now draws over the cloud instead of
-     glowing through it, and --gas-boost carries the brightness difference. */
-  .gas {
-    position: absolute; top: 50%; left: 50%; z-index: -7;
-    translate: -50% -50%;
-    /* Sized off the larger viewport axis, not width alone: on a short wide
-       window a vw-only halo lands as a thin band under the headline. */
-    pointer-events: none;
-    will-change: rotate, scale, translate, opacity;
-  }
-  /* Sizes are deliberately close to the headline block rather than to the
-     viewport: a halo that reaches the window edges has to be blurred and
-     rasterised across the whole screen on first paint, and it leaves the page
-     with no ground of its own to sit on.
-     Pulled in a further fifth for the same two reasons at once. A halo that
-     stops well short of the edges leaves the headline and the button as the
-     only things reaching them, and the layers are blurred and part-transparent
-     over their whole area — at the previous size the three of them together
-     cost the hero about a quarter of its frame rate. */
-  /* Two lit arcs with dark sky between them, not a colour wheel. Nine hues
-     spaced evenly around a circle is the shape every generated landing page
-     arrives with; the give-away is that no angle is darker than any other. The
-     stops below are deliberately uneven — warm on one shoulder, cool on the
-     other, and two wide arcs carrying nothing at all. */
-  .gas-1 {
-    width: min(max(70vw, 67vh), 1200px); aspect-ratio: 1.75; opacity: calc(.46 * var(--gas-boost));
-    background: conic-gradient(from 195deg,
-      var(--gas-void) 0deg 26deg,
-      #ff6a3d 62deg,
-      #ff3d7f 96deg,
-      var(--gas-void) 132deg 168deg,
-      #6a5cff 206deg,
-      #2ec2e0 242deg,
-      var(--gas-void) 286deg 344deg,
-      #ff6a3d 360deg);
-    /* Blur only far enough to kill the conic's straight seams. Past roughly
-       a third of the layer's short side the hues melt into one another and the
-       layer stops reading as distinct colour. */
-    filter: blur(30px) saturate(1.62) contrast(1.05);
-    /* The clear core runs to 20% rather than 5%. The headline sits in the
-       middle of this layer, and colour arriving that close to the centre is
-       what made the type look like it was printed on the glow. */
-    -webkit-mask-image: radial-gradient(closest-side, transparent 20%, #000 44%, transparent 92%);
-            mask-image: radial-gradient(closest-side, transparent 20%, #000 44%, transparent 92%);
-    /* Slow on purpose: with defined hue bands the eye tracks the rotation
-       easily, and anything under ~30s reads as a spinning pinwheel. */
-    animation: gas-spin 38s linear infinite, gas-breathe 11s ease-in-out infinite;
-  }
-  .gas-2 {
-    width: min(max(58vw, 56vh), 990px); aspect-ratio: 1.6; opacity: calc(.28 * var(--gas-boost));
-    background: conic-gradient(from 320deg,
-      var(--gas-void) 0deg 40deg,
-      #ff9a5c 84deg,
-      var(--gas-void) 128deg 196deg,
-      #8f6bff 238deg,
-      #34d0c4 274deg,
-      var(--gas-void) 318deg 360deg);
-    filter: blur(24px) saturate(1.6) contrast(1.04);
-    -webkit-mask-image: radial-gradient(closest-side, transparent 24%, #000 48%, transparent 90%);
-            mask-image: radial-gradient(closest-side, transparent 24%, #000 48%, transparent 90%);
-    animation: gas-spin-rev 48s linear infinite, gas-breathe-2 8s ease-in-out infinite;
-  }
-  /* Loose clouds drifting across the ring — without them the two conic layers
-     stay too even and the halo reads as a printed gradient instead of vapour.
-     This is the layer that carries the visible motion: the conic spins read as
-     colour churn, the blobs travel. */
-  .gas-3 {
-    width: min(max(78vw, 75vh), 1340px); aspect-ratio: 1.9; opacity: calc(.38 * var(--gas-boost));
-    /* Each blob keeps a flat core before it falls off, so at this blur it reads
-       as a body of colour with an edge rather than a smear. The travel of those
-       four bodies is what makes the motion legible. */
-    background:
-      radial-gradient(circle at 24% 30%, rgba(255,120,70,.52) 0 7%, transparent 44%),
-      radial-gradient(circle at 79% 39%, rgba(96,130,255,.46) 0 6%, transparent 42%),
-      radial-gradient(circle at 60% 79%, rgba(190,90,255,.4) 0 6%, transparent 40%);
-    filter: blur(34px) saturate(1.5) contrast(1.04);
-    -webkit-mask-image: radial-gradient(closest-side, transparent 18%, #000 42%, transparent 92%);
-            mask-image: radial-gradient(closest-side, transparent 18%, #000 42%, transparent 92%);
-    animation: gas-drift 19s ease-in-out infinite;
-  }
-
-  /* Keeps the headline sitting on ground rather than on the brightest part of
-     the halo. Sized to the text block, not to the halo: a scrim wide enough to
-     cover the cloud is what flattened the colour into a pastel wash. */
-  .hero-shade {
-    position: absolute; top: 50%; left: 50%; z-index: -2;
-    width: min(94vw, 1180px); aspect-ratio: 2.5; transform: translate(-50%, -50%);
-    pointer-events: none;
-    background: radial-gradient(ellipse, var(--shade) 0%, var(--shade-mid) 44%, transparent 72%);
-  }
-  /* Page headers get a quiet echo of the hero: the same spectrum, far weaker,
-     plus the same dot matrix. Built from tokens so it survives both themes —
-     the starfield it replaced was painted in white and vanished on a light page. */
-  /* z-index 0, not -1: the section paints an opaque background of its own, and a
-     negative layer would sit behind it and never be seen. The page content that
-     follows is positioned, so it still stacks above this. */
-  .page-aura {
-    position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
-  }
-  /* Offset toward the trailing edge: these page headers set their text against
-     the left margin, so the bloom lands in the space that would otherwise be
-     a blank half-screen. */
-  .page-aura::before {
-    position: absolute; top: -34%; left: 68%; width: min(86vw, 1120px); aspect-ratio: 1.5;
-    translate: -50% 0; content: "";
-    background: conic-gradient(from 200deg, #ff6a3d, #a8ff3c, #33c9ff, #d24bff, #ff6a3d);
-    filter: blur(104px) saturate(1.3); opacity: calc(.34 * var(--gas-boost));
-    mix-blend-mode: var(--gas-blend);
-    -webkit-mask-image: radial-gradient(closest-side, #000 14%, transparent 66%);
-            mask-image: radial-gradient(closest-side, #000 14%, transparent 66%);
-    /* No rotation. A full turn took 78 seconds — slower than anyone looks at a
-       page header — while holding a blurred layer this size permanently
-       composited on all three subpages. The bloom is static now, and identical
-       to look at. */
-  }
-  /* Grain keeps the large gradients from banding on wide gamut displays. */
-  /* Composited plainly rather than blended: overlay on a layer this size,
-     stacked above everything that moves, was the second-largest cost in the
-     hero. The lower opacity is what keeps unblended noise from reading as haze
-     on the dark page — it still breaks up banding, which is all it is for. */
-  .hero-grain {
-    position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .05;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-  /* Softens the four edges into the page. It stops short of full strength at the
-     edges on purpose — a circle reaching opacity at 84% of the radius erased the
-     outer two thirds of the halo, which is why the colour looked small. */
-  .hero-vignette {
-    position: absolute; inset: 0; z-index: -1; pointer-events: none;
-    background: radial-gradient(ellipse 86% 80% at 50% 50%, transparent 36%, var(--vignette) 100%);
-  }
-
-  .hero-headline {
-    font-family: var(--font-display);
-    font-size: clamp(26px, 4.2vw, 60px);
-    /* 1.1 was set for a headline of two or three words. This one is a full
-       sentence, and at 26ch it ran to lines long enough that the eye lost the
-       return. A shorter measure and a little more leading is the whole fix. */
-    font-weight: 660; line-height: 1.16; letter-spacing: -.03em;
-    max-width: 21ch; text-wrap: balance;
-    color: var(--text);
-    /* Cyrillic diacritics (the breve on "й", the dots on "ё") rise above the line
-       box, and background-clip: text paints nothing outside the element box —
-       without this padding they lose their gradient and read as stray smudges. */
-    padding-block: .14em .05em;
-  }
-
-  /* The detached contour that used to float around this is gone. A ring sitting
-     in clear space reads as an effect applied to the button; the button is
-     meant to read as the one thing on the screen you can press. What is left is
-     a control at a credible size with a shadow that only grounds it. */
-  .hero-cta {
-    position: relative; z-index: 1;
-    display: inline-flex; align-items: center; justify-content: center;
-    height: clamp(50px, 4.4vw, 58px); padding: 0 clamp(26px, 3vw, 36px);
-    border-radius: 999px; background: var(--solid); color: var(--solid-ink);
-    font-size: clamp(15px, 1.2vw, 17px); font-weight: 680; letter-spacing: -.01em;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, .28);
-    /* No idle animation: the button sits still and answers the pointer. */
-    transition: scale .2s ease, background .2s ease, box-shadow .2s ease;
-  }
-  .hero-cta:hover {
-    background: var(--solid-hover); scale: 1.02;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, .34);
-  }
-  .hero-cta:active { scale: .99; }
-
-  .hero-title {
-    font-family: var(--font-display);
-    font-size: clamp(46px, 9.5vw, 132px);
-    font-weight: 700; line-height: .95; letter-spacing: -.035em;
-    /* The breve over "й" rises above the line box, and background-clip: text paints
-       nothing outside the element box — without this padding the diacritic loses its
-       gradient and reads as a stray smudge over the headline. */
-    padding-block: .18em .06em;
-    color: var(--text);
-  }
-  /* ---------- Sections & cards ---------- */
-  .section { position: relative; border-top: 1px solid var(--line); background: var(--bg); }
-  /* The header already draws a rule along its bottom edge, so a page that opens
-     straight into a section was starting with two hairlines a pixel apart —
-     legible as a thick, slightly uneven band rather than as one edge. The hero
-     is not affected: it is the first child on the landing, so the rule below it
-     still separates it from what follows. */
-  .section:first-child { border-top: 0; }
-  /* This one fades out of the raised surface on its own, over some sixty
-     pixels. A hard line on top of that gradient announces the boundary the
-     gradient exists to soften. */
-  .section-alt { border-top: 0; background: linear-gradient(180deg, var(--bg-raised), var(--bg)); }
-  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
-  .section-title { font-family: var(--font-display); font-size: clamp(30px, 4.2vw, 52px); font-weight: 680; line-height: 1.06; letter-spacing: -.025em; }
-  .lead { color: var(--muted); font-size: clamp(15px, 1.5vw, 18px); line-height: 1.7; }
-
-  .card {
-    position: relative; border: 1px solid var(--line); border-radius: 14px;
-    background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
-    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
-  }
-  .card:hover { border-color: var(--line-strong); transform: translateY(-3px); box-shadow: var(--shadow); }
-  .card-glow { border-color: rgba(255,255,255,.28); }
-  .card-icon {
-    display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px;
-    border: 1px solid var(--line-strong); background: var(--raise-hover); color: var(--text);
-  }
-  .stat-value { font-family: var(--font-display); font-size: clamp(28px, 3.4vw, 42px); font-weight: 700; letter-spacing: -.02em; }
-
-  /* Held out of rendering until it is scrolled near. It sits below the fold, but
-     the browser was still laying it out and painting it on every frame the hero
-     animated, which cost the first screen about ten frames a second. The
-     reserved height keeps the scrollbar from jumping when it does render. */
-  /* ---------- The problem, stated before the product ----------
-     Rules rather than cards. Three bordered boxes in a row is the shape a
-     feature grid takes, and this is not a feature grid — it is one argument in
-     three parts, so it is set as a list with a rule between the parts. */
-  .problems { display: grid; grid-template-columns: 1fr; gap: 0; }
-  .problem { padding: 22px 0; border-top: 1px solid var(--line); }
-  .problem:last-child { border-bottom: 1px solid var(--line); }
-  @media (min-width: 900px) {
-    .problem {
-      display: grid; grid-template-columns: minmax(0, 20ch) minmax(0, 62ch);
-      column-gap: 44px; align-items: baseline;
-    }
-  }
-  .problem-pain {
-    margin: 0; font-family: var(--font-display);
-    font-size: 17px; font-weight: 640; line-height: 1.4; letter-spacing: -.012em;
-  }
-  .problem-detail { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.66; }
-  @media (min-width: 900px) { .problem-detail { margin-top: 0; } }
-
-  /* A definition list, because that is what it is: four terms and what each one
-     means. Set as two columns of pairs rather than as cards — a card implies a
-     thing you can click, and none of these are. */
-  .capabilities { display: grid; grid-template-columns: 1fr; gap: 0; margin: 0; }
-  @media (min-width: 820px) { .capabilities { grid-template-columns: 1fr 1fr; column-gap: 56px; } }
-  .capability { padding: 20px 0; border-top: 1px solid var(--line); }
-  .capability-term {
-    font-family: var(--font-display);
-    font-size: 16px; font-weight: 640; letter-spacing: -.012em;
-  }
-  .capability-text { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.62; }
-
-  .section-deferred {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 620px;
-  }
-
-
-
-  /* ---------- Search overlay ---------- */
-  .search-overlay { position: fixed; inset: 0; z-index: 90; display: grid; justify-items: center; padding: 12vh 20px 20px; background: var(--scrim); backdrop-filter: blur(6px); }
-  .search-panel {
-    display: flex; flex-direction: column; width: min(720px, 100%); max-height: 72vh; overflow: hidden;
-    border: 1px solid var(--line-strong); border-radius: 14px;
-    background: var(--panel);
-    box-shadow: var(--shadow);
-  }
-  .search-input-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-  .search-input { flex: 1; border: 0; background: transparent; color: var(--text); font-size: 16px; outline: none; }
-  .search-input::placeholder { color: var(--muted-soft); }
-  .search-results { overflow-y: auto; padding: 8px; }
-  .search-group-title { padding: 10px 10px 6px; color: var(--muted-soft); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-  .search-item { width: 100%; padding: 11px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--text); text-align: left; cursor: pointer; transition: background .14s ease; }
-  .search-item:hover, .search-item-active { background: var(--raise-hover); }
-  .search-item strong { display: block; font-size: 14px; font-weight: 620; }
-  .search-item p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
-  .search-empty { padding: 26px 14px; color: var(--muted); font-size: 14px; text-align: center; }
-
-  .site-footer { border-top: 1px solid var(--line); background: var(--bg-raised); }
-  .footer-link { color: var(--muted); font-size: 14px; transition: color .16s ease; }
-  .footer-link:hover { color: var(--text); }
-}
-
-@layer utilities {
-  .grid-lines {
-    background-image:
-      linear-gradient(var(--stage-line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--stage-line) 1px, transparent 1px);
-    background-size: 46px 46px;
-  }
-  /* Emphasis without colour — the palette keeps hue reserved for the hero burst.
-     A gradient clipped to the glyphs fades them into the page and softens every
-     stem; the same emphasis reads more sharply as plain full-strength white
-     against body copy that is already a step down from it. */
-  .text-gradient { color: var(--headline-from); }
-}
-
-/* The layers keep `translate: -50% -50%` for centring, so every animation below
-   drives `rotate` and `scale` instead — separate properties that cannot knock
-   the centring out from under the element. */
-/* Amplitude is the whole point here. Under an 80px blur a 7% scale step and a
-   .1 opacity step are invisible, so each layer swings roughly half its own
-   opacity, travels a few percent of the viewport, and the spins run fast enough
-   for the colour churn to register within a few seconds of landing.
-   Every opacity stop carries --gas-boost: keyframes override the declared
-   opacity outright, so dropping the token here would lose the light-theme lift
-   the moment the animation starts. */
-@keyframes gas-spin { to { rotate: 360deg; } }
-@keyframes gas-spin-rev { to { rotate: -360deg; } }
-@keyframes gas-breathe {
-  0%, 100% { translate: -50% -50%; scale: 1; opacity: calc(.3 * var(--gas-boost)); }
-  50% { translate: calc(-50% + 2vw) calc(-50% - 1.6vh); scale: 1.12; opacity: calc(.62 * var(--gas-boost)); }
-}
-@keyframes gas-breathe-2 {
-  0%, 100% { translate: -50% -50%; scale: 1.05; opacity: calc(.18 * var(--gas-boost)); }
-  45% { translate: calc(-50% - 2.2vw) calc(-50% + 1.3vh); scale: .92; opacity: calc(.44 * var(--gas-boost)); }
-}
-@keyframes gas-drift {
-  0%, 100% { translate: -50% -50%; rotate: 0deg; scale: 1; opacity: calc(.28 * var(--gas-boost)); }
-  34% { translate: calc(-50% + 3vw) calc(-50% + 2vh); rotate: 20deg; scale: 1.1; opacity: calc(.5 * var(--gas-boost)); }
-  67% { translate: calc(-50% - 2.4vw) calc(-50% - 2vh); rotate: -15deg; scale: .94; opacity: calc(.35 * var(--gas-boost)); }
-}
-/* One grid cell of travel, so the loop is seamless. */
-@keyframes stage-flow {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(0, 112px, 0); }
-}
-
-@media (max-width: 640px) {
-  .site-container { width: min(100% - 28px, 1280px); }
-  /* The 40% bump is a desktop gesture. On a 430px screen the same controls run
-     past the edge, so the bar steps back down rather than clipping. */
-  :root { --header-h: 74px; }
-  .gh-header-inner { gap: 12px; }
-  .gh-header .gh-brand { gap: 10px; font-size: 20px; }
-  .gh-header .gh-brand-mark { width: 32px; height: 32px; border-radius: 9px; font-size: 16px; }
-  .gh-header .gh-actions { gap: 8px; }
-  .gh-header .gh-button { height: 40px; padding: 0 12px; font-size: 15px; }
-  .gh-header .gh-menu-button, .gh-header .gh-search { width: 40px; height: 40px; }
-  /* A halo sized off viewport width collapses on a phone, leaving the wordmark
-     stranded in black. Narrow screens get a proportionally wider one, turned
-     upright so it fills a portrait screen — and sized explicitly rather than off
-     the `max(vw, vh)` base, which on a tall phone would blur a 1100px surface
-     for no visual gain. */
-  .gas-1 { width: 94vw; aspect-ratio: .95; }
-  .gas-2 { width: 77vw; aspect-ratio: .9; }
-  .gas-3 { width: 106vw; aspect-ratio: 1.05; }
-  .hero-shade { width: 96vw; aspect-ratio: 1.5; }
-}
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .gas, .hero-plane::before { animation: none !important; }
-  *, *::before, *::after { transition-duration: .01ms !important; }
-}
-
-/* ---------- Lura public system: quiet white pages ---------- */
-:root {
-  color-scheme: light;
-  --bg: #ffffff;
-  --bg-raised: #f7f8fa;
-  --line: #e4e6ea;
-  --line-strong: #cfd3da;
-  --text: #111318;
-  --muted: #656a73;
-  --muted-soft: #858a93;
-  --accent: #183b73;
-  --panel: #ffffff;
-  --raise: #ffffff;
-  --raise-hover: #f1f4f8;
-  --card-top: #ffffff;
-  --card-bottom: #fbfcfd;
-  --field: #ffffff;
-  --field-line-hover: #9aa6b8;
-  --solid: linear-gradient(135deg, #081a3a, #183b73);
-  --solid-ink: #ffffff;
-  --solid-hover: #102f60;
-  --headline-from: #0a1c3c;
-  --shadow: 0 18px 46px rgba(10, 28, 60, .09);
-  --scrim: rgba(10, 18, 34, .38);
-  --header-h: 88px;
-  background: #ffffff;
-}
-
-body,
-.site-shell,
-.section,
-.site-footer {
-  background: #ffffff;
-}
-
-h1,
-h2,
-h3,
-h4,
-.section-title,
-.hero-title {
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-weight: 400;
-}
-
-.site-container { width: min(100% - 48px, 1220px); }
-.public-site { overflow-x: clip; color: var(--text); }
-
+/* ---------- Шапка ---------- */
 .public-header {
   position: sticky;
   top: 0;
   z-index: 60;
-  border-bottom: 1px solid rgba(228, 230, 234, .85);
-  background: rgba(255, 255, 255, .94);
-  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
 }
 
 .public-header-inner {
@@ -696,45 +95,28 @@ h4,
   width: max-content;
   align-items: center;
   gap: 10px;
-  color: #111318;
-  font-size: 23px;
-  font-weight: 760;
-  letter-spacing: -.035em;
+  color: var(--text);
+  font-size: 26px;
+  font-weight: 680;
+  letter-spacing: -.04em;
 }
 
-.public-brand-logo { width: 39px; height: 39px; }
-.public-nav { display: flex; align-items: center; gap: clamp(22px, 3vw, 42px); }
+.public-brand-logo { width: 46px; height: 46px; color: var(--brand); }
+
+.public-nav { display: flex; align-items: center; gap: clamp(22px, 3vw, 40px); }
 
 .public-nav-link {
-  position: relative;
   border: 0;
-  padding: 10px 0;
-  color: #343840;
+  border-bottom: 2px solid transparent;
+  padding: 6px 0;
+  color: #3a3f47;
   background: transparent;
   font-size: 15px;
-  font-weight: 580;
-  cursor: pointer;
+  font-weight: 560;
 }
 
-.public-nav-link::after {
-  position: absolute;
-  right: 0;
-  bottom: 5px;
-  left: 0;
-  height: 1px;
-  background: linear-gradient(90deg, #081a3a, #1c4a8c);
-  content: "";
-  transform: scaleX(0);
-  transform-origin: right;
-  transition: transform .18s ease;
-}
-
-.public-nav-link:hover::after,
-.public-nav-link:focus-visible::after,
-.public-nav-link.is-active::after {
-  transform: scaleX(1);
-  transform-origin: left;
-}
+.public-nav-link:hover { color: var(--text); }
+.public-nav-link.is-active { color: var(--text); border-bottom-color: var(--text); }
 
 .public-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 
@@ -745,29 +127,19 @@ h4,
   justify-content: center;
   gap: 8px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 0 17px;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 620;
   letter-spacing: -.01em;
-  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
 }
 
-.public-button:hover { transform: translateY(-1px); }
 .public-button svg { width: 17px; height: 17px; }
-.public-button-quiet { color: #30343b; }
-.public-button-quiet:hover { background: #f5f6f8; }
-
-.public-button-primary {
-  color: #ffffff;
-  background: linear-gradient(135deg, #081a3a, #183b73);
-  box-shadow: 0 8px 20px rgba(10, 28, 60, .13);
-}
-
-.public-button-primary:hover { background: linear-gradient(135deg, #06152f, #102f60); }
-.public-button-outline { border-color: var(--line-strong); color: #171a20; background: #ffffff; }
-.public-button-outline:hover { border-color: #aeb5c0; background: #f8f9fb; }
-.public-button-large { min-height: 52px; border-radius: 12px; padding: 0 23px; font-size: 15px; }
+.public-button-primary { color: #ffffff; background: var(--text); }
+.public-button-primary:hover { background: #2b303a; }
+.public-button-outline { border-color: var(--line-strong); color: var(--text); background: var(--bg); }
+.public-button-outline:hover { border-color: #a9b0ba; background: var(--bg-soft); }
+.public-button-large { min-height: 50px; border-radius: 10px; padding: 0 22px; font-size: 15px; }
 
 .public-menu-button {
   display: none;
@@ -775,223 +147,218 @@ h4,
   height: 42px;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  color: #111318;
-  background: #ffffff;
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--bg);
 }
 
 .public-menu-button svg { width: 21px; height: 21px; }
-.public-mobile-nav { border-top: 1px solid var(--line); background: #ffffff; }
+.public-mobile-nav { border-top: 1px solid var(--line); background: var(--bg); }
 .public-mobile-nav > div { display: grid; padding-block: 8px 16px; }
 
-.public-mobile-nav a,
-.public-mobile-nav button {
-  border: 0;
+.public-mobile-nav a {
   border-bottom: 1px solid var(--line);
   padding: 14px 2px;
-  color: #282c33;
-  background: transparent;
-  text-align: left;
+  color: #2b3038;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 580;
 }
 
-.public-landing {
-  display: grid;
-  min-height: calc(100svh - var(--header-h));
-  align-items: center;
-  background: #ffffff;
+/* ---------- Страница ---------- */
+.public-page { background: var(--bg); }
+.public-page-hero { border-bottom: 1px solid var(--line); }
+.public-page-hero-inner { padding-block: clamp(56px, 8vw, 96px); }
+
+.public-kicker {
+  margin: 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
 }
 
-.public-landing-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.04fr) minmax(380px, .82fr);
-  align-items: center;
-  gap: clamp(64px, 9vw, 140px);
-  padding-block: 70px 90px;
-}
-
-.public-landing-copy { max-width: 720px; }
-.public-kicker { margin: 0; color: #183b73; font-size: 13px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-
-.public-landing h1,
 .public-page-hero h1,
 .public-status h1 {
-  margin: 18px 0 0;
-  color: #0d1015;
-  font-size: clamp(52px, 6.4vw, 86px);
-  line-height: .98;
-  letter-spacing: -.052em;
-  text-wrap: balance;
+  max-width: 900px;
+  margin: 16px 0 0;
+  font-size: clamp(38px, 5vw, 62px);
+  font-weight: 560;
+  line-height: 1.05;
+  letter-spacing: -.04em;
 }
 
 .public-lead {
   max-width: 680px;
-  margin: 26px 0 0;
-  color: #555b65;
-  font-size: clamp(17px, 1.7vw, 21px);
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: clamp(17px, 1.5vw, 20px);
   line-height: 1.6;
 }
 
-.public-cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+.public-cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 
-.public-flow {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  background: #ffffff;
-  box-shadow: 0 24px 60px rgba(10, 28, 60, .08);
-}
-
-.public-flow-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 19px 22px;
-  border-bottom: 1px solid var(--line);
-  color: #777c85;
-  background: linear-gradient(180deg, #ffffff, #fafbfc);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.public-flow-row { display: grid; grid-template-columns: 40px 1fr; gap: 14px; padding: 23px 22px; border-bottom: 1px solid var(--line); }
-.public-flow-index { color: #1c4a8c; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
-.public-flow-row h2 { margin: 0; color: #16191e; font-family: var(--font-sans); font-size: 16px; font-weight: 700; }
-.public-flow-row p { margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
-
-.public-inline-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 22px;
-  color: #183b73;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.public-inline-link svg { width: 17px; height: 17px; transition: transform .16s ease; }
-.public-inline-link:hover svg { transform: translateX(3px); }
-
-.public-page { background: #ffffff; }
-.public-page-hero { border-bottom: 1px solid var(--line); }
-.public-page-hero-inner { padding-block: clamp(72px, 10vw, 132px); }
-.public-page-hero h1 { max-width: 1000px; font-size: clamp(50px, 6vw, 82px); }
-.public-page-hero .public-lead { max-width: 730px; }
-.public-section { border-bottom: 1px solid var(--line); padding-block: clamp(60px, 8vw, 104px); }
-.public-section-soft { background: linear-gradient(180deg, #fafbfc, #f6f8fb); }
+.public-section { border-bottom: 1px solid var(--line); padding-block: clamp(48px, 6vw, 80px); }
+.public-section-soft { background: var(--bg-soft); }
 
 .public-section-title {
-  margin: 14px 0 0;
-  color: #111318;
-  font-size: clamp(36px, 4.6vw, 60px);
-  line-height: 1.04;
-  letter-spacing: -.042em;
+  margin: 12px 0 0;
+  font-weight: 580;
+  font-size: clamp(28px, 3.4vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -.035em;
 }
 
+/* ---------- Списки возможностей ---------- */
 .public-feature-list { border-top: 1px solid var(--line); }
-.public-feature-row { display: grid; grid-template-columns: 52px 42px minmax(220px, .75fr) minmax(300px, 1fr); align-items: center; gap: 24px; padding: 28px 4px; border-bottom: 1px solid var(--line); }
+
+.public-feature-row {
+  display: grid;
+  grid-template-columns: 48px 32px minmax(200px, .7fr) minmax(280px, 1fr);
+  align-items: center;
+  gap: 24px;
+  padding: 24px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
 .public-feature-number { color: #8a8f98; font-family: var(--font-mono); font-size: 12px; }
-.public-feature-icon { width: 22px; height: 22px; color: #183b73; }
-.public-feature-row h2 { margin: 0; font-family: var(--font-sans); font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
-.public-feature-row p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; }
+.public-feature-icon { width: 22px; height: 22px; color: var(--accent); }
+.public-feature-row h2 { margin: 0; font-size: 18px; font-weight: 660; letter-spacing: -.02em; }
+.public-feature-row p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
 
-.public-output-grid,
-.public-sources-grid,
-.public-boundary { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(400px, 1fr); gap: clamp(50px, 9vw, 130px); align-items: start; }
-.public-output-list,
-.public-definition-list { margin: 0; border-top: 1px solid var(--line-strong); }
+.public-output-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .8fr) minmax(380px, 1fr);
+  gap: clamp(40px, 7vw, 96px);
+  align-items: start;
+}
 
-.public-output-list > div,
-.public-definition-list > div { display: grid; grid-template-columns: 160px 1fr; gap: 22px; padding: 20px 0; border-bottom: 1px solid var(--line); }
-.public-output-list strong,
-.public-definition-list dt { color: #16191f; font-size: 15px; font-weight: 700; }
-.public-output-list span,
-.public-definition-list dd { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
-.public-boundary > p { margin: 0; color: #4f5560; font-size: 18px; line-height: 1.75; }
+.public-output-list { border-top: 1px solid var(--line-strong); }
 
-.public-cta-section { padding-block: clamp(64px, 8vw, 104px); }
+.public-output-list > div {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.public-output-list strong { font-size: 15px; font-weight: 660; }
+.public-output-list span { color: var(--muted); font-size: 15px; line-height: 1.55; }
+
+/* ---------- Документация ---------- */
+.public-docs {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 72px);
+  align-items: start;
+  padding-block: clamp(40px, 5vw, 64px);
+}
+
+.public-docs-nav {
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+
+.public-docs-nav a { padding: 8px 10px; border-radius: 7px; color: var(--muted); font-size: 14px; font-weight: 560; }
+.public-docs-nav a:hover { color: var(--text); background: var(--bg-soft); }
+
+.public-docs-body { display: grid; gap: clamp(44px, 5vw, 68px); min-width: 0; max-width: 760px; }
+.public-docs-section { scroll-margin-top: calc(var(--header-h) + 20px); }
+.public-docs-section h2 { margin: 10px 0 0; font-size: clamp(24px, 2.6vw, 32px); letter-spacing: -.03em; }
+.public-docs-section > p { max-width: 680px; margin: 14px 0 0; color: var(--muted); font-size: 16px; line-height: 1.65; }
+
+.public-docs-list { margin: 22px 0 0; padding: 0; border-top: 1px solid var(--line); }
+
+.public-docs-list > div,
+.public-docs-list > li {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.public-docs-list dt,
+.public-docs-list strong { color: var(--text); font-weight: 620; }
+.public-docs-list code { color: var(--text); font-family: var(--font-mono); font-size: 14px; }
+.public-docs-list dd,
+.public-docs-list span { margin: 0; color: var(--muted); }
+.public-docs-list .is-planned { color: #8a8f98; }
+.public-docs-list-wide > div { grid-template-columns: 230px 1fr; }
+.public-docs-list > li { grid-template-columns: 44px 1fr; gap: 14px; }
+.public-docs-index { color: #8a8f98; font-family: var(--font-mono); font-size: 13px; }
+
+.public-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+
+.public-tags span {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* ---------- Финальный блок и подвал ---------- */
+.public-cta-section { padding-block: clamp(52px, 6vw, 80px); }
 .public-cta-section-inner { display: flex; align-items: flex-end; justify-content: space-between; gap: 36px; }
-.public-cta-section h2 { max-width: 760px; margin: 0; font-size: clamp(38px, 5vw, 66px); line-height: 1.02; letter-spacing: -.044em; }
+.public-cta-section h2 { max-width: 720px; margin: 0; font-weight: 580; font-size: clamp(28px, 3.6vw, 46px); line-height: 1.08; letter-spacing: -.038em; }
 .public-cta-section .public-cta-row { flex: 0 0 auto; margin: 0; }
 
-.public-status { display: grid; min-height: calc(100svh - var(--header-h)); place-items: center; padding-block: 80px; text-align: center; }
+.public-status { display: grid; min-height: calc(100svh - var(--header-h)); place-items: center; padding-block: 72px; text-align: center; }
 .public-status-inner { display: grid; justify-items: center; }
-.public-status h1 { max-width: 900px; font-size: clamp(50px, 7vw, 86px); }
-.public-status .public-lead { max-width: 640px; }
+.public-status .public-lead { max-width: 620px; }
 .public-status .public-cta-row { justify-content: center; }
 
-.public-footer { border-top: 1px solid var(--line); background: #fafbfc; }
-.public-footer-main { display: grid; grid-template-columns: 1fr auto; gap: 60px; padding-block: 48px; }
-.public-footer-main p { max-width: 440px; margin: 18px 0 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+.public-footer { border-top: 1px solid var(--line); background: var(--bg-soft); }
+.public-footer-main { display: grid; grid-template-columns: 1fr auto; gap: 60px; padding-block: 44px; }
+.public-footer-main p { max-width: 440px; margin: 18px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .public-footer-links { display: grid; min-width: 170px; align-content: start; gap: 12px; }
-.public-footer-links a,
-.public-footer-links button { width: max-content; border: 0; padding: 0; color: #4c515b; background: transparent; font-size: 14px; cursor: pointer; }
-.public-footer-links a:hover,
-.public-footer-links button:hover { color: #183b73; }
-.public-footer-note { border-top: 1px solid var(--line); padding: 18px 24px; color: #858a93; text-align: center; font-size: 12px; }
-
-/* Existing documentation keeps its content and receives the same visual language. */
-.section { border-color: var(--line); }
-.section-alt { background: #f8f9fb; }
-.section-title { color: #111318; font-weight: 400; letter-spacing: -.04em; }
-.eyebrow { color: #183b73; }
-.card { border-color: var(--line); background: #ffffff; box-shadow: none; }
-.card:hover { border-color: var(--line-strong); box-shadow: 0 14px 34px rgba(10, 28, 60, .07); }
-.card-icon { color: #183b73; background: #f3f6fa; }
-.gh-button-primary { color: #ffffff; background: linear-gradient(135deg, #081a3a, #183b73); }
-.gh-button-primary:hover { background: #102f60; }
-.gh-button-ghost { color: #171a20; background: #ffffff; }
-.search-overlay { background: rgba(10, 18, 34, .38); }
-.search-panel { border-color: var(--line); background: #ffffff; box-shadow: 0 28px 80px rgba(10, 28, 60, .2); }
-.search-item:hover,
-.search-item-active { background: #f1f4f8; }
+.public-footer-links a { width: max-content; color: #4c515b; font-size: 14px; }
+.public-footer-links a:hover { color: var(--text); }
+.public-footer-note { border-top: 1px solid var(--line); padding: 16px 24px; color: #858a93; text-align: center; font-size: 12px; }
 
 @media (max-width: 900px) {
   .public-header-inner { grid-template-columns: 1fr auto; }
   .public-nav { display: none; }
   .public-menu-button { display: grid; }
-  .public-landing-grid { grid-template-columns: 1fr; gap: 50px; }
-  .public-landing-copy { max-width: 780px; }
-  .public-flow { width: min(100%, 650px); }
-  .public-feature-row { grid-template-columns: 40px 32px 1fr; gap: 18px; }
+  .public-feature-row { grid-template-columns: 38px 28px 1fr; gap: 16px; }
   .public-feature-row p { grid-column: 3; }
-  .public-output-grid,
-  .public-sources-grid,
-  .public-boundary { grid-template-columns: 1fr; gap: 42px; }
+  .public-output-grid { grid-template-columns: 1fr; gap: 36px; }
+  .public-docs { grid-template-columns: 1fr; gap: 28px; }
+  .public-docs-nav { position: static; grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; padding-bottom: 4px; }
   .public-cta-section-inner { align-items: flex-start; flex-direction: column; }
   .public-cta-section .public-cta-row { margin-top: 0; }
 }
 
 @media (max-width: 640px) {
-  :root { --header-h: 76px; }
-  .site-container { width: min(100% - 32px, 1220px); }
-  .public-header-inner { min-height: var(--header-h); gap: 12px; }
-  .public-brand { gap: 8px; font-size: 21px; }
-  .public-brand-logo { width: 34px; height: 34px; }
-  .public-actions { gap: 4px; }
-  .public-actions .public-button-quiet { display: none; }
+  :root { --header-h: 72px; }
+  .site-container { width: min(100% - 32px, 1180px); }
+  .public-header-inner { gap: 12px; }
+  .public-brand { gap: 8px; font-size: 22px; }
+  .public-brand-logo { width: 36px; height: 36px; }
+  .public-actions { gap: 6px; }
   .public-actions .public-button-primary { min-height: 40px; padding-inline: 14px; }
   .public-menu-button { width: 40px; height: 40px; }
-  .public-landing { align-items: start; }
-  .public-landing-grid { gap: 42px; padding-block: 58px 64px; }
-  .public-landing h1,
   .public-page-hero h1,
-  .public-status h1 { font-size: clamp(45px, 13vw, 64px); }
-  .public-lead { margin-top: 22px; font-size: 17px; }
+  .public-status h1 { font-size: clamp(32px, 9vw, 44px); }
+  .public-lead { margin-top: 18px; font-size: 17px; }
   .public-cta-row { align-items: stretch; flex-direction: column; width: 100%; }
   .public-cta-row .public-button { width: 100%; }
-  .public-flow { border-radius: 22px; }
-  .public-flow-header { padding: 16px 18px; }
-  .public-flow-row { padding: 20px 18px; }
-  .public-page-hero-inner { padding-block: 68px; }
-  .public-feature-row { grid-template-columns: 32px 28px 1fr; gap: 12px; padding-block: 24px; }
+  .public-page-hero-inner { padding-block: 52px; }
+  .public-feature-row { grid-template-columns: 30px 26px 1fr; gap: 12px; padding-block: 20px; }
   .public-feature-row h2 { font-size: 17px; }
   .public-feature-row p { font-size: 14px; }
   .public-output-list > div,
-  .public-definition-list > div { grid-template-columns: 1fr; gap: 7px; }
-  .public-cta-section-inner { gap: 28px; }
-  .public-footer-main { grid-template-columns: 1fr; gap: 38px; }
+  .public-docs-list > div,
+  .public-docs-list-wide > div { grid-template-columns: 1fr; gap: 6px; }
+  .public-cta-section-inner { gap: 24px; }
+  .public-footer-main { grid-template-columns: 1fr; gap: 32px; }
 }

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AnalysisPane } from "@/components/analysis-pane";
 import { CommandPane } from "@/components/command-pane";
+import { LuraLogo } from "@/components/lura-logo";
 import { SourcesPane } from "@/components/sources-pane";
 import { UploadDialog, type PendingSource } from "@/components/upload-dialog";
 import {
@@ -179,7 +180,7 @@ export function WorkspaceScreen() {
     <div className="ws">
       <header className="ws-topbar">
         <div className="ws-brand">
-          <span className="ws-brand-mark">L</span>
+          <LuraLogo className="ws-brand-mark" />
           <span className="ws-brand-name">Lura</span>
           <span className="ws-topbar-divider" />
           <span className="ws-workspace-name">{project.name}</span>

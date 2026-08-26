@@ -6,14 +6,16 @@ import { LuraLogo } from '@/components/LuraLogo';
 import { authUrl } from '@/lib/authUrl';
 
 const NAV = [
-  ['/docs', 'Документация'],
   ['/capabilities', 'Возможности'],
   ['/cooperation', 'Сотрудничество'],
+  ['/docs', 'Документация'],
 ] as const;
 
 function Brand() {
+  /* Корень сайта — регистрация, туда же ведёт и знак. Ссылка сразу на
+     приложение авторизации, чтобы не делать лишний переход через редирект. */
   return (
-    <a href={authUrl('/workspace')} className="public-brand" aria-label="Lura — в рабочее пространство">
+    <a href={authUrl('/register')} className="public-brand" aria-label="Lura — на главную">
       <LuraLogo className="public-brand-logo" />
       <span>Lura</span>
     </a>

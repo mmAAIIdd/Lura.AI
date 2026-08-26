@@ -33,7 +33,11 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<AuthRedirect path="/workspace" />} />
+        {/* Лендинга больше нет: корень сайта — это регистрация через Google.
+            Уже вошедшего посетителя middleware приложения авторизации уводит
+            с /register в рабочее пространство, так что обе роли попадают куда
+            нужно за один переход. */}
+        <Route path="/" element={<AuthRedirect path="/register" />} />
         <Route path="/login" element={<Navigate to="/register" replace />} />
         <Route path="/signup" element={<Navigate to="/register" replace />} />
         <Route path="/register" element={<AuthRedirect path="/register" />} />
