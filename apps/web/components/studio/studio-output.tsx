@@ -40,7 +40,7 @@ type Props = {
   thread: StudioThread | null;
   live: { text: string; tools: ToolTrace[]; model: string } | null;
   error: string | null;
-  runtime: { ready: boolean; models: string[]; search: string | null };
+  runtime: { ready: boolean; models: string[]; search: string | null; storage?: string };
   onStarter: (prompt: string) => void;
 };
 
@@ -68,6 +68,7 @@ export function StudioOutput({ mode, thread, live, error, runtime, onStarter }: 
         <div className="st-badges">
           <span className="st-badge">{model}</span>
           {runtime.search ? <span className="st-badge st-badge-quiet">поиск: {runtime.search}</span> : null}
+          {runtime.storage ? <span className="st-badge st-badge-quiet">{runtime.storage}</span> : null}
           {!runtime.ready ? <span className="st-badge st-badge-warn">нет ключа Gemini</span> : null}
         </div>
       </header>

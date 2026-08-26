@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 
 import { LIMITS } from "@/lib/studio/config";
 import { indexDocument } from "@/lib/studio/rag";
-import { listDocuments, saveDocument, setBusinessDocument, type DocumentKind, type StudioDocument } from "@/lib/studio/store";
+import {
+  StorageUnavailableError,
+  listDocuments,
+  saveDocument,
+  setBusinessDocument,
+  type DocumentKind,
+  type StudioDocument,
+} from "@/lib/studio/store";
 import { htmlToText, looksTextual } from "@/lib/studio/text";
 
 export const runtime = "nodejs";
@@ -29,7 +36,7 @@ async function store(
   const document = await saveDocument({ title, kind, origin }, text);
   const index = await indexDocument(document.id, title, text);
   if (kind === "business") await setBusinessDocument(document.id);
-  return { ...document, chunks: index.chunks.length, indexed: index.vectors ? "embeddings" : "keywords" };
+  return { ...document, chunks: index.chunks, indexed: index.vectors ? "embeddings" : "keywords" };
 }
 
 export async function GET() {
@@ -37,6 +44,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  try {
+    return await handleUpload(request);
+  } catch (error) {
+    if (error instanceof StorageUnavailableError) return fail(error.message, 503);
+    throw error;
+  }
+}
+
+async function handleUpload(request: Request) {
   const type = request.headers.get("content-type") || "";
 
   if (type.includes("application/json")) {

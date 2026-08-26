@@ -30,7 +30,7 @@ export function geminiKey(): string | null {
  */
 export function modelChain(): string[] {
   const preferred = process.env.GEMINI_MODEL?.trim() || "gemini-3.1-pro-preview";
-  const fallbacks = (process.env.GEMINI_FALLBACK_MODELS?.trim() || "gemini-3-flash-preview,gemini-3.1-flash-lite")
+  const fallbacks = (process.env.GEMINI_FALLBACK_MODELS?.trim() || "gemini-3-flash-preview,gemini-3.6-flash,gemini-3.1-flash-lite")
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);

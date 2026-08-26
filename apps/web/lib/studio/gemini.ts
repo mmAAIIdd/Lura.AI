@@ -151,7 +151,13 @@ function payload(options: GenerateOptions) {
  */
 export async function* streamTurn(options: GenerateOptions): AsyncGenerator<StreamEvent> {
   const key = keyOrThrow();
-  const candidates = options.model ? [options.model] : modelChain();
+  /* Выбранная на первом ходу модель идёт первой, но не единственной: квота
+     заканчивается и посреди разбора, и упереться в неё на пятом ходу — значит
+     потерять всю уже проделанную работу. */
+  const chain = modelChain();
+  const candidates = options.model
+    ? [options.model, ...chain.filter((name) => name !== options.model)]
+    : chain;
   const failures: string[] = [];
 
   for (const model of candidates) {
@@ -176,7 +182,7 @@ export async function* streamTurn(options: GenerateOptions): AsyncGenerator<Stre
       const status = response?.status ?? 0;
       failures.push(`${model}: ${reason}`);
       /* Недоступна именно эта модель — пробуем следующую в цепочке. */
-      if ((modelUnavailable(status) || transient(status)) && candidates.length > 1) continue;
+      if ((modelUnavailable(status) || transient(status)) && model !== candidates[candidates.length - 1]) continue;
       throw new GeminiError(reason, status, transient(status));
     }
 

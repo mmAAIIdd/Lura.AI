@@ -15,7 +15,11 @@ import type { StudioMode, StudioThread, ToolTrace, WorkspaceState } from "@/lib/
  * компонентам значило бы синхронизировать их между собой на каждом токене.
  */
 
-const EMPTY: WorkspaceState = { documents: [], threads: [], runtime: { ready: true, models: [], search: null } };
+const EMPTY: WorkspaceState = {
+  documents: [],
+  threads: [],
+  runtime: { ready: true, models: [], search: null, storage: "" },
+};
 
 type Live = { text: string; tools: ToolTrace[]; model: string };
 
@@ -30,7 +34,14 @@ export function StudioScreen() {
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/studio/workspace", { cache: "no-store" });
-    if (response.ok) setWorkspace((await response.json()) as WorkspaceState);
+    if (response.ok) {
+      setWorkspace((await response.json()) as WorkspaceState);
+      return;
+    }
+    /* Молча пустое пространство выглядит как «документов нет», хотя на самом
+       деле их некуда положить. */
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    if (body?.error) setError(body.error);
   }, []);
 
   const openThread = useCallback(async (id: string) => {
