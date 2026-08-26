@@ -4,7 +4,7 @@ import net from "node:net";
 import { LIMITS } from "@/lib/studio/config";
 import type { FunctionDeclaration } from "@/lib/studio/gemini";
 import { searchDocuments } from "@/lib/studio/rag";
-import { searchWeb } from "@/lib/studio/search";
+import { SearchUnavailableError, searchWeb } from "@/lib/studio/search";
 import { htmlToText, looksTextual, truncate } from "@/lib/studio/text";
 import type { ToolTrace } from "@/lib/studio/store";
 
@@ -120,7 +120,26 @@ async function runWebSearch(args: Record<string, unknown>): Promise<ToolOutcome>
   if (!query) throw new Error("Пустой запрос.");
   const limit = Math.min(Math.max(Number(args.limit) || 6, 1), 10);
 
-  const { provider, results } = await searchWeb(query, limit);
+  let provider: string;
+  let results: Awaited<ReturnType<typeof searchWeb>>["results"];
+  try {
+    ({ provider, results } = await searchWeb(query, limit));
+  } catch (error) {
+    /* Неработающий поиск и пустая выдача — разные вещи. Если их смешать,
+       агент напишет «в интернете ничего нет», хотя он туда не сходил. */
+    if (error instanceof SearchUnavailableError) {
+      return {
+        response: {
+          error: error.message,
+          instruction:
+            "Поиск не выполнен. Не выдумывай ссылки и не пиши «по данным интернета». " +
+            "Работай на внутренних документах и прямо укажи в отчёте, что внешние источники собрать не удалось.",
+        },
+        trace: { name: "web_search", argument: query, summary: "поиск недоступен", ok: false },
+      };
+    }
+    throw error;
+  }
   return {
     response: {
       provider,

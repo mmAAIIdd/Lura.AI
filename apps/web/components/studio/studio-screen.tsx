@@ -33,11 +33,25 @@ export function StudioScreen() {
     if (response.ok) setWorkspace((await response.json()) as WorkspaceState);
   }, []);
 
+  const openThread = useCallback(async (id: string) => {
+    const response = await fetch(`/api/studio/threads/${id}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = (await response.json()) as { thread: StudioThread };
+    setThread(body.thread);
+    setMode(body.thread.mode);
+    setError(null);
+  }, []);
+
   useEffect(() => {
     void refresh();
     const saved = window.localStorage.getItem("lura-studio-mode");
     if (saved === "updates" || saved === "reports") setMode(saved);
-  }, [refresh]);
+
+    /* Ссылка на разбор открывает именно его: готовый отчёт нужно уметь
+       переслать коллеге, а не пересказывать. */
+    const wanted = new URLSearchParams(window.location.search).get("thread");
+    if (wanted) void openThread(wanted);
+  }, [refresh, openThread]);
 
   function switchMode(next: StudioMode) {
     setMode(next);
@@ -75,14 +89,6 @@ export function StudioScreen() {
       return;
     }
     await refresh();
-  }
-
-  async function openThread(id: string) {
-    const response = await fetch(`/api/studio/threads/${id}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const body = (await response.json()) as { thread: StudioThread };
-    setThread(body.thread);
-    setError(null);
   }
 
   async function run(prompt: string, attachments: ComposerAttachment[]) {
@@ -216,7 +222,10 @@ export function StudioScreen() {
           await fetch(`/api/studio/documents/${id}`, { method: "DELETE" });
           await refresh();
         }}
-        onOpenThread={openThread}
+        onOpenThread={(id) => {
+          void openThread(id);
+          window.history.replaceState(null, "", `/studio?thread=${id}`);
+        }}
         onNewThread={() => {
           setThread(null);
           setError(null);

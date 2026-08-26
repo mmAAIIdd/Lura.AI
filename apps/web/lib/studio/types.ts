@@ -54,5 +54,5 @@ export type ThreadSummary = { id: string; mode: StudioMode; title: string; updat
 export type WorkspaceState = {
   documents: StudioDocument[];
   threads: ThreadSummary[];
-  runtime: { ready: boolean; models: string[]; search: "gemini" | "duckduckgo" | null };
+  runtime: { ready: boolean; models: string[]; search: "gemini" | "brave" | "tavily" | "duckduckgo" | null };
 };

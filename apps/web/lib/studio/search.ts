@@ -3,15 +3,28 @@ import { API_ROOT, geminiKey, modelChain } from "@/lib/studio/config";
 /**
  * Поиск в интернете для агента.
  *
- * Два источника. Первый — встроенный googleSearch у Gemini: он даёт ссылки,
- * которые модель уже сверила с запросом. На бесплатном тарифе этот инструмент
- * отвечает 429, поэтому есть второй — HTML-выдача DuckDuckGo, которой не
- * нужен ключ. Провайдер определяется один раз за жизнь процесса: пробовать
- * недоступный grounding на каждый запрос — это лишняя секунда на ровном месте.
+ * Провайдеры, по убыванию качества:
+ *
+ * 1. googleSearch у Gemini — ссылки, которые модель уже сверила с запросом.
+ *    Ключа сверх основного не требует, но у grounding отдельная квота: на
+ *    бесплатном тарифе он отвечает 429 на любой модели, и включается он
+ *    ровно тогда, когда у проекта появляется биллинг.
+ * 2. Brave Search API — если задан BRAVE_API_KEY. Бесплатный тариф покрывает
+ *    рабочее пространство одной команды с запасом.
+ * 3. Tavily — если задан TAVILY_API_KEY. Отдаёт сразу выжимку по странице.
+ * 4. DuckDuckGo — без ключа, крайний случай. Отвечает 202 с пустой страницей,
+ *    когда решит, что запросов многовато; это блокировка, а не «не нашлось».
+ *
+ * Bing здесь сознательно нет. Его RSS и HTML отдаются без ключа, но выдача
+ * приходит по первому слову запроса: на «отзывы диспетчеров о системе заявок»
+ * возвращались сайты-отзовики вообще ни о чём. Источник, который выглядит
+ * рабочим и подсовывает мусор, хуже отсутствующего.
+ *
+ * Провайдер определяется один раз за жизнь процесса и потом идёт первым.
  */
 
 export type SearchResult = { title: string; url: string; snippet: string };
-export type SearchProvider = "gemini" | "duckduckgo";
+export type SearchProvider = "gemini" | "brave" | "tavily" | "duckduckgo";
 
 let resolvedProvider: SearchProvider | null = null;
 
@@ -21,12 +34,137 @@ export function currentProvider(): SearchProvider | null {
 
 function configured(): SearchProvider | "auto" {
   const value = process.env.STUDIO_SEARCH?.trim();
-  if (value === "gemini" || value === "duckduckgo") return value;
+  if (value === "gemini" || value === "brave" || value === "tavily" || value === "duckduckgo") return value;
   return "auto";
 }
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+function stripTags(value: string): string {
+  return decodeEntities(value.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+}
+
+/* ---------- Brave ---------- */
+
+async function brave(query: string, limit: number): Promise<SearchResult[]> {
+  const key = process.env.BRAVE_API_KEY?.trim();
+  if (!key) throw new Error("нет BRAVE_API_KEY");
+
+  const response = await fetch(
+    `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}`,
+    {
+      headers: { Accept: "application/json", "X-Subscription-Token": key },
+      signal: AbortSignal.timeout(20000),
+    },
+  );
+  if (!response.ok) throw new Error(`Brave ответил ${response.status}`);
+
+  const data = (await response.json()) as { web?: { results?: { title?: string; url?: string; description?: string }[] } };
+  const results = (data.web?.results ?? [])
+    .filter((item) => item.url)
+    .slice(0, limit)
+    .map((item) => ({
+      title: stripTags(item.title ?? item.url!).slice(0, 200),
+      url: item.url!,
+      snippet: stripTags(item.description ?? "").slice(0, 400),
+    }));
+
+  if (!results.length) throw new Error("Brave вернул пустую выдачу");
+  return results;
+}
+
+/* ---------- Tavily ---------- */
+
+async function tavily(query: string, limit: number): Promise<SearchResult[]> {
+  const key = process.env.TAVILY_API_KEY?.trim();
+  if (!key) throw new Error("нет TAVILY_API_KEY");
+
+  const response = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ query, max_results: limit, search_depth: "basic" }),
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!response.ok) throw new Error(`Tavily ответил ${response.status}`);
+
+  const data = (await response.json()) as { results?: { title?: string; url?: string; content?: string }[] };
+  const results = (data.results ?? [])
+    .filter((item) => item.url)
+    .slice(0, limit)
+    .map((item) => ({
+      title: (item.title ?? item.url!).slice(0, 200),
+      url: item.url!,
+      snippet: (item.content ?? "").slice(0, 400),
+    }));
+
+  if (!results.length) throw new Error("Tavily вернул пустую выдачу");
+  return results;
+}
+
+/* ---------- Gemini: googleSearch ---------- */
+
+async function geminiGrounding(query: string, limit: number): Promise<SearchResult[]> {
+  const key = geminiKey();
+  if (!key) throw new Error("нет ключа Gemini");
+
+  const failures: string[] = [];
+
+  /* Перебор по цепочке моделей: у основной может не быть квоты, и запрос к
+     grounding через неё падает раньше, чем начнётся поиск. */
+  for (const model of modelChain()) {
+    const response = await fetch(`${API_ROOT}/models/${model}:generateContent?key=${key}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: `Найди источники по запросу: ${query}` }] }],
+        tools: [{ googleSearch: {} }],
+      }),
+      signal: AbortSignal.timeout(30000),
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      failures.push(`${model}: ${response ? response.status : "нет ответа"}`);
+      continue;
+    }
+
+    const data = (await response.json()) as {
+      candidates?: {
+        groundingMetadata?: { groundingChunks?: { web?: { uri: string; title?: string } }[] };
+        content?: { parts?: { text?: string }[] };
+      }[];
+    };
+
+    const candidate = data.candidates?.[0];
+    const chunks = candidate?.groundingMetadata?.groundingChunks ?? [];
+    if (!chunks.length) {
+      failures.push(`${model}: без источников`);
+      continue;
+    }
+
+    const summary = (candidate?.content?.parts ?? []).map((part) => part.text ?? "").join(" ").slice(0, 400);
+    return chunks
+      .filter((chunk) => chunk.web?.uri)
+      .slice(0, limit)
+      .map((chunk) => ({ title: chunk.web?.title || chunk.web!.uri, url: chunk.web!.uri, snippet: summary }));
+  }
+
+  throw new Error(`googleSearch недоступен (${failures.join(", ")})`);
+}
+
+/* ---------- DuckDuckGo ---------- */
 
 function decodeDuckLink(href: string): string | null {
   const value = href.startsWith("//") ? `https:${href}` : href;
@@ -40,30 +178,15 @@ function decodeDuckLink(href: string): string | null {
   }
 }
 
-function stripTags(value: string): string {
-  return value
-    .replace(/<[^>]+>/g, "")
-    .replace(/&#x27;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 /**
- * Разбор выдачи DuckDuckGo.
- *
- * Тег ищется целиком, а класс и href достаются из его атрибутов по
- * отдельности: у обычной выдачи класс стоит перед href и в двойных кавычках,
- * у облегчённой — наоборот и в одинарных. Регэксп с фиксированным порядком
- * работал ровно на одной из двух и молча возвращал ноль результатов на другой.
+ * Тег ищется целиком, класс и href достаются из атрибутов по отдельности: у
+ * обычной выдачи класс стоит перед href в двойных кавычках, у облегчённой —
+ * наоборот и в одинарных. Регэксп с фиксированным порядком работал ровно на
+ * одной из двух и молча возвращал ноль результатов на другой.
  */
 function collectTagged(html: string, tag: string, className: string): { attrs: string; body: string }[] {
-  const matcher = new RegExp(`<${tag}\b([^>]*)>([\s\S]*?)<\/${tag}>`, "g");
-  const wanted = new RegExp(`class=["'][^"']*\b${className}\b`);
+  const matcher = new RegExp(`<${tag}\\b([^>]*)>([\\s\\S]*?)</${tag}>`, "g");
+  const wanted = new RegExp(`class=["'][^"']*\\b${className}\\b`);
   const found: { attrs: string; body: string }[] = [];
   for (const match of html.matchAll(matcher)) {
     if (wanted.test(match[1])) found.push({ attrs: match[1], body: match[2] });
@@ -71,15 +194,9 @@ function collectTagged(html: string, tag: string, className: string): { attrs: s
   return found;
 }
 
-function parseResults(html: string, limit: number): SearchResult[] {
-  const anchors = [
-    ...collectTagged(html, "a", "result__a"),
-    ...collectTagged(html, "a", "result-link"),
-  ];
-  const snippets = [
-    ...collectTagged(html, "a", "result__snippet"),
-    ...collectTagged(html, "td", "result-snippet"),
-  ];
+function parseDuckResults(html: string, limit: number): SearchResult[] {
+  const anchors = [...collectTagged(html, "a", "result__a"), ...collectTagged(html, "a", "result-link")];
+  const snippets = [...collectTagged(html, "a", "result__snippet"), ...collectTagged(html, "td", "result-snippet")];
 
   const results: SearchResult[] = [];
   const seen = new Set<string>();
@@ -100,103 +217,92 @@ function parseResults(html: string, limit: number): SearchResult[] {
   return results;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function duckduckgo(query: string, limit: number): Promise<SearchResult[]> {
-  /* Три подхода: обычная выдача, она же после паузы, затем облегчённая.
-     DuckDuckGo на частые запросы отвечает 202 с пустой страницей — это мягкая
-     блокировка, а не «ничего не найдено», и разница здесь принципиальная:
-     во втором случае агент напишет «данных нет» и будет неправ. */
   const attempts = [
     { url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, wait: 0 },
-    { url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, wait: 1500 },
-    { url: `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, wait: 800 },
+    { url: `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, wait: 1500 },
+    { url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, wait: 4000 },
   ];
 
-  let lastProblem = "выдача пустая";
+  let problem = "DuckDuckGo вернул пустую выдачу";
 
   for (const attempt of attempts) {
     if (attempt.wait) await sleep(attempt.wait);
-
     const response = await fetch(attempt.url, {
       headers: { "User-Agent": UA, "Accept-Language": "ru,en;q=0.8" },
       signal: AbortSignal.timeout(20000),
     }).catch(() => null);
 
     if (!response) {
-      lastProblem = "DuckDuckGo не ответил";
+      problem = "DuckDuckGo не ответил";
       continue;
     }
     if (response.status === 202) {
-      lastProblem = "DuckDuckGo придержал запрос";
+      problem = "DuckDuckGo придержал запросы с этого адреса";
       continue;
     }
     if (!response.ok) {
-      lastProblem = `DuckDuckGo ответил ${response.status}`;
+      problem = `DuckDuckGo ответил ${response.status}`;
       continue;
     }
 
-    const results = parseResults(await response.text(), limit);
+    const results = parseDuckResults(await response.text(), limit);
     if (results.length) return results;
   }
 
-  if (lastProblem !== "выдача пустая") throw new Error(lastProblem);
-  return [];
+  throw new Error(problem);
 }
 
-async function geminiGrounding(query: string, limit: number): Promise<SearchResult[]> {
-  const key = geminiKey();
-  if (!key) throw new Error("нет ключа");
+const PROVIDERS: Record<SearchProvider, (query: string, limit: number) => Promise<SearchResult[]>> = {
+  gemini: geminiGrounding,
+  brave,
+  tavily,
+  duckduckgo,
+};
 
-  const response = await fetch(`${API_ROOT}/models/${modelChain()[0]}:generateContent?key=${key}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: `Найди источники по запросу: ${query}` }] }],
-      tools: [{ googleSearch: {} }],
-    }),
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!response.ok) throw new Error(`grounding ответил ${response.status}`);
+const ORDER: SearchProvider[] = ["brave", "tavily", "gemini", "duckduckgo"];
 
-  const data = (await response.json()) as {
-    candidates?: {
-      groundingMetadata?: { groundingChunks?: { web?: { uri: string; title?: string } }[] };
-      content?: { parts?: { text?: string }[] };
-    }[];
-  };
+export class SearchUnavailableError extends Error {}
 
-  const candidate = data.candidates?.[0];
-  const chunks = candidate?.groundingMetadata?.groundingChunks ?? [];
-  if (!chunks.length) throw new Error("grounding не вернул источников");
+/* Когда не отвечает ни один провайдер, следующие вызовы в ближайшие минуты
+   падают сразу. Иначе каждый web_search внутри одного разбора тратит десяток
+   секунд на обход тех же самых отказов. */
+let unavailableUntil = 0;
+const UNAVAILABLE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastFailure = "";
 
-  const summary = (candidate?.content?.parts ?? []).map((part) => part.text ?? "").join(" ").slice(0, 400);
-  return chunks
-    .filter((chunk) => chunk.web?.uri)
-    .slice(0, limit)
-    .map((chunk) => ({ title: chunk.web?.title || chunk.web!.uri, url: chunk.web!.uri, snippet: summary }));
-}
-
-export async function searchWeb(query: string, limit = 6): Promise<{ provider: SearchProvider; results: SearchResult[] }> {
+export async function searchWeb(
+  query: string,
+  limit = 6,
+): Promise<{ provider: SearchProvider; results: SearchResult[] }> {
   const preference = configured();
 
-  if (preference === "duckduckgo" || resolvedProvider === "duckduckgo") {
-    resolvedProvider = "duckduckgo";
-    return { provider: "duckduckgo", results: await duckduckgo(query, limit) };
+  /* Явно выбранный провайдер не подменяется молча: иначе непонятно, почему в
+     отчёте источники не оттуда, откуда просили. */
+  if (preference !== "auto") {
+    return { provider: preference, results: await PROVIDERS[preference](query, limit) };
   }
 
-  if (preference === "gemini" || resolvedProvider === "gemini" || resolvedProvider === null) {
+  if (Date.now() < unavailableUntil) throw new SearchUnavailableError(lastFailure);
+
+  const order = resolvedProvider
+    ? [resolvedProvider, ...ORDER.filter((name) => name !== resolvedProvider)]
+    : ORDER;
+
+  const failures: string[] = [];
+  for (const provider of order) {
     try {
-      const results = await geminiGrounding(query, limit);
-      resolvedProvider = "gemini";
-      return { provider: "gemini", results };
+      const results = await PROVIDERS[provider](query, limit);
+      resolvedProvider = provider;
+      return { provider, results };
     } catch (error) {
-      /* Явно выбранный провайдер не подменяется молча — иначе непонятно,
-         почему в отчёте другие источники. */
-      if (preference === "gemini") throw error;
-      resolvedProvider = "duckduckgo";
+      failures.push(`${provider} — ${error instanceof Error ? error.message : "ошибка"}`);
     }
   }
 
-  return { provider: "duckduckgo", results: await duckduckgo(query, limit) };
+  lastFailure =
+    `Поиск в интернете сейчас недоступен: ${failures.join("; ")}. ` +
+    "Подключите биллинг к проекту Gemini (тогда заработает googleSearch) или задайте BRAVE_API_KEY.";
+  unavailableUntil = Date.now() + UNAVAILABLE_COOLDOWN_MS;
+  throw new SearchUnavailableError(lastFailure);
 }

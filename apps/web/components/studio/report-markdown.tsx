@@ -44,7 +44,7 @@ function renderInline(text: string): ReactNode[] {
 
 type Block =
   | { kind: "heading"; level: 2 | 3 | 4; text: string }
-  | { kind: "list"; ordered: boolean; items: string[] }
+  | { kind: "list"; ordered: boolean; start: number; items: string[] }
   | { kind: "table"; head: string[]; rows: string[][] }
   | { kind: "code"; text: string }
   | { kind: "quote"; text: string }
@@ -134,7 +134,10 @@ function parseBlocks(source: string): Block[] {
       const previous = blocks[blocks.length - 1];
       const item = (bullet ? bullet[1] : numbered![2]).trim();
       if (previous?.kind === "list" && previous.ordered === ordered) previous.items.push(item);
-      else blocks.push({ kind: "list", ordered, items: [item] });
+      /* Нумерация берётся из самого текста. Вложенные пояснения разрывают
+         список, и без start второй пункт «2.» отрисовывался снова единицей —
+         в отчёте с решениями это читается как две разные первые задачи. */
+      else blocks.push({ kind: "list", ordered, start: ordered ? Number(numbered![1]) || 1 : 1, items: [item] });
       continue;
     }
 
@@ -156,7 +159,16 @@ export function ReportMarkdown({ source }: { source: string }) {
           return <Tag key={index}>{renderInline(block.text)}</Tag>;
         }
         if (block.kind === "list") {
-          const Tag = block.ordered ? "ol" : "ul";
+          if (block.ordered) {
+            return (
+              <ol key={index} start={block.start}>
+                {block.items.map((item, position) => (
+                  <li key={position}>{renderInline(item)}</li>
+                ))}
+              </ol>
+            );
+          }
+          const Tag = "ul";
           return (
             <Tag key={index}>
               {block.items.map((item, position) => (

@@ -40,6 +40,16 @@ function transient(status: number): boolean {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/* Предел на один ход модели. Без него зависшее соединение висит вечно: у
+   fetch нет таймаута по умолчанию, и разбор замирал без единой строчки в
+   логе — не отличить от «модель долго думает». */
+const TURN_TIMEOUT_MS = Number(process.env.STUDIO_TURN_TIMEOUT_MS || 120000);
+
+function turnSignal(external?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(TURN_TIMEOUT_MS);
+  return external ? AbortSignal.any([external, timeout]) : timeout;
+}
+
 function keyOrThrow(): string {
   const key = geminiKey();
   if (!key) {
@@ -155,7 +165,7 @@ export async function* streamTurn(options: GenerateOptions): AsyncGenerator<Stre
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload(options)),
-        signal: options.signal,
+        signal: turnSignal(options.signal),
       });
       if (response.ok || !transient(response.status)) break;
       await sleep(1200 * (attempt + 1));

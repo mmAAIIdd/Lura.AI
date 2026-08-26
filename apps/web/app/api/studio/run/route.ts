@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       };
 
       try {
-        for await (const event of runAgent({ threadId: body?.threadId, prompt, mode, attachments })) {
+        for await (const event of runAgent({ threadId: body?.threadId, prompt, mode, attachments, signal: request.signal })) {
           send(event);
         }
       } catch (error) {
