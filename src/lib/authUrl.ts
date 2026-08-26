@@ -41,10 +41,6 @@ export function authAppBase(): string | null {
 /**
  * Build a link into the auth app.
  *
- * The theme still travels in the query string even though this site has only a
- * dark one: the auth app runs on a separate origin and cannot read anything
- * stored here, and without the parameter it falls back to its own default.
- *
  * With no auth app configured this returns the in-app route, which explains the
  * situation instead of bouncing the visitor at a page that cannot answer.
  */
@@ -52,5 +48,5 @@ export function authUrl(path: AuthPath) {
   const base = authAppBase();
   if (!base) return path;
 
-  return `${base}${path}?theme=dark`;
+  return `${base}${path}`;
 }

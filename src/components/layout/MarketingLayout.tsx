@@ -33,6 +33,10 @@ export function MarketingLayout() {
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
+  useEffect(() => {
+    if (location.hash === '#questions') setSearchOpen(true);
+  }, [location.hash]);
+
   // Once the first screen is up and idle, pull the overlay chunk in the
   // background: off the critical path, but already there when "/" is pressed.
   useEffect(() => {

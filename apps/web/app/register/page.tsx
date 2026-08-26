@@ -1,10 +1,7 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
-/**
- * Google is the only provider, and a first sign-in already creates the account,
- * so there is nothing for a separate registration screen to do. The route stays
- * because the marketing site links to it.
- */
+import { GoogleSignIn } from "@/components/google-sign-in";
+
 export default function RegisterPage() {
-  redirect("/login");
+  return <Suspense fallback={null}><GoogleSignIn /></Suspense>;
 }

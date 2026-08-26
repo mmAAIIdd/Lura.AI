@@ -129,8 +129,8 @@ export function GoogleSignIn() {
 
   return (
     <AuthShell
-      title="Вход в Lura"
-      subtitle="Аккаунт создаётся при первом входе — отдельная регистрация не нужна."
+      title="Начните с Lura"
+      subtitle="Твой менеджер для бизнеса"
     >
       {blocked ? (
         <p className="form-error" role="alert">{blocked}</p>

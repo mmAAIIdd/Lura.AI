@@ -247,294 +247,254 @@ button, input, select, textarea { font: inherit; }
   .auth-security-note { padding: 0 8px; }
 }
 
-/* ---------- Public auth screens: the marketing shell, ported ----------
-   These pages run in a different app, on a different origin, with no package
-   between them, so the palette below is a deliberate copy of the marketing
-   app's `src/index.css` rather than an import. When one moves, move the other.
+/* ---------- Public auth screens: white Lura registration ---------- */
+:root:has(.auth-page) { background: #ffffff; }
 
-   Everything is scoped to `.auth-page`. The workspace screens further down own
-   the rest of this file and keep their own lighter palette, and several of the
-   classes restyled here (`.button`, `.form-error`) are shared with them. */
 .auth-page {
-  color-scheme: dark;
-  --bg: #000000;
-  --line: rgba(255, 255, 255, .09);
-  --line-strong: rgba(255, 255, 255, .18);
-  --text: #f4f4f6;
-  --muted: #8e9099;
-  --muted-soft: #7c7e88;
-  --panel: #0a0a0c;
-  --raise: rgba(255, 255, 255, .03);
-  --raise-hover: rgba(255, 255, 255, .07);
-  --shadow: 0 18px 44px rgba(0, 0, 0, .6);
-  --solid: #ffffff;
-  --solid-ink: #000000;
-  --solid-hover: #e3e3e6;
-  /* The halo is additive on black and subtractive on white, so the blend mode
-     is a token here for the same reason it is one on the marketing site. */
-  --gas-blend: screen;
-  --gas-boost: 1;
-  --headline-from: #ffffff;
-  --headline-mid: #f5f6f8;
-  --headline-to: #e4e5ea;
-  --focus: rgba(255, 255, 255, .16);
-  --shade: rgba(0, 0, 0, .5);
-  --shade-mid: rgba(0, 0, 0, .2);
-  --danger-ink: #ffb3ae; --danger-bg: rgba(214, 62, 52, .12); --danger-line: rgba(214, 62, 52, .34);
-  --ok-ink: #9bf0bd; --ok-bg: rgba(40, 190, 110, .1); --ok-line: rgba(40, 190, 110, .3);
-
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Variable", "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-
-  position: relative;
-  isolation: isolate;
+  --auth-navy: #0a1c3c;
+  --auth-navy-soft: #183b73;
+  --auth-ink: #111318;
+  --auth-muted: #696d76;
+  --auth-line: #dcdee3;
+  min-height: 100svh;
+  overflow: visible;
   display: grid;
-  place-items: center;
-  min-height: 100vh;
-  padding: 48px 24px 56px;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter Variable", "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  font-weight: 450;
-  font-optical-sizing: auto;
-  font-feature-settings: "calt" 1, "liga" 1, "pnum" 1, "kern" 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Dark is the brand default and light is an override — the boot script in the
-   root layout always stamps one of the two, so there is no third state. */
-:root[data-theme="light"] .auth-page {
+  grid-template-rows: auto minmax(0, 1fr);
+  place-items: initial;
+  padding: 0;
+  color: var(--auth-ink);
   color-scheme: light;
-  --bg: #ffffff;
-  --line: rgba(0, 0, 0, .10);
-  --line-strong: rgba(0, 0, 0, .18);
-  --text: #0b0b0e;
-  --muted: #5c5e67;
-  --muted-soft: #6d6f78;
-  --panel: #ffffff;
-  --raise: rgba(0, 0, 0, .028);
-  --raise-hover: rgba(0, 0, 0, .06);
-  --shadow: 0 18px 44px rgba(15, 18, 40, .12);
-  --solid: #0b0b0e;
-  --solid-ink: #ffffff;
-  --solid-hover: #26272d;
-  --gas-blend: multiply;
-  --gas-boost: 1.05;
-  --headline-from: #08080b;
-  --headline-mid: #1c1d22;
-  --headline-to: #34353c;
-  --focus: rgba(0, 0, 0, .12);
-  --shade: rgba(255, 255, 255, .42);
-  --shade-mid: rgba(255, 255, 255, .14);
-  --danger-ink: #7f1d1d; --danger-bg: #fff1f0; --danger-line: #f3c8c4;
-  --ok-ink: #14532d; --ok-bg: #edf9f0; --ok-line: #b8e5c2;
+  background: #ffffff;
+  font-family: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* The page element covers the viewport, but overscroll still exposes the root
-   behind it — without this the sand colour the workspace uses flashes at the
-   edge of a rubber-band scroll. */
-:root:has(.auth-page) { background: #000000; }
-:root[data-theme="light"]:has(.auth-page) { background: #ffffff; }
+.auth-page::before,
+.auth-page .auth-hero::before,
+.auth-page .auth-panel::before { content: none; }
 
-/* The landing's halo at the quieter scale its inner pages use: enough colour to
-   place the page in the same world, not enough to compete with a form. One
-   layer and one animated property, unlike the hero's three. */
-.auth-aura {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: -2;
-  width: min(max(78vw, 76vh), 1240px);
-  aspect-ratio: 1.7;
-  translate: -50% -50%;
-  pointer-events: none;
-  mix-blend-mode: var(--gas-blend);
-  opacity: calc(.4 * var(--gas-boost));
-  background: conic-gradient(from 0deg,
-    #ff6a3d, #ffb02e, #a8ff3c, #2ee6a8, #33c9ff, #6a5cff, #d24bff, #ff3d8b, #ff6a3d);
-  filter: blur(30px) saturate(1.6) contrast(1.05);
-  -webkit-mask-image: radial-gradient(closest-side, transparent 6%, #000 28%, transparent 92%);
-          mask-image: radial-gradient(closest-side, transparent 6%, #000 28%, transparent 92%);
-  animation: auth-aura-spin 44s linear infinite;
+.auth-header {
+  display: flex;
+  width: min(100%, 1600px);
+  min-height: 92px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  margin: 0 auto;
+  padding: 20px clamp(24px, 4.2vw, 64px);
 }
-@keyframes auth-aura-spin { to { rotate: 360deg; } }
 
-/* Keeps the heading and the card on ground instead of on the brightest part of
-   the halo — the job .hero-shade does on the landing. */
-.auth-page::before {
+.auth-page .auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0;
+  color: var(--auth-ink);
+  font-size: 24px;
+  font-weight: 760;
+  letter-spacing: -.035em;
+}
+
+.auth-brand-logo {
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+}
+
+.auth-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(20px, 3vw, 42px);
+}
+
+.auth-nav a {
+  position: relative;
+  padding: 9px 0;
+  color: #272a31;
+  font-size: 15px;
+  font-weight: 580;
+  letter-spacing: -.01em;
+}
+
+.auth-nav a::after {
   content: "";
   position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: -1;
-  width: min(94vw, 920px);
-  aspect-ratio: 1.2;
-  translate: -50% -50%;
-  pointer-events: none;
-  background: radial-gradient(ellipse, var(--shade) 0%, var(--shade-mid) 46%, transparent 74%);
+  right: 0;
+  bottom: 4px;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--auth-navy), var(--auth-navy-soft));
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform .18s ease;
 }
 
-.auth-page .auth-hero { width: min(100%, 640px); }
-/* The chocolate rule the old theme opened with has no counterpart on the
-   landing, where the wordmark is the first thing on the page. */
-.auth-page .auth-hero::before { content: none; }
-
-.auth-page .brand { gap: 10px; color: var(--text); font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
-.auth-page .auth-brand { margin-bottom: 34px; }
-.auth-page .brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--solid);
-  color: var(--solid-ink);
-  font-size: 15px;
-  font-weight: 900;
+.auth-nav a:hover::after,
+.auth-nav a:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: left;
 }
 
-.auth-page .auth-heading { width: min(100%, 640px); margin-bottom: 30px; }
+.auth-nav a[aria-disabled="true"] { pointer-events: none; }
+
+.auth-main {
+  display: grid;
+  width: min(100%, 1600px);
+  grid-template-columns: minmax(0, 760px) minmax(160px, 1fr);
+  align-items: center;
+  margin: 0 auto;
+  padding: 32px clamp(24px, 4.2vw, 64px) 108px;
+}
+
+.auth-page .auth-hero {
+  display: grid;
+  width: min(100%, 650px);
+  justify-items: center;
+  justify-self: center;
+}
+
+.auth-page .auth-heading {
+  width: 100%;
+  margin: 0 0 36px;
+  text-align: center;
+}
+
 .auth-page .auth-heading h1 {
-  max-width: 20ch;
-  margin-inline: auto;
-  font-family: var(--font-display);
-  font-size: clamp(30px, 4.4vw, 50px);
-  font-weight: 660;
-  line-height: 1.1;
-  letter-spacing: -.032em;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  color: var(--auth-ink);
+  background: none;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(52px, 5vw, 76px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -.052em;
   text-wrap: balance;
-  /* Cyrillic diacritics rise above the line box and background-clip: text
-     paints nothing outside it, so they need the padding to keep their fill. */
-  padding-block: .14em .05em;
-  background: linear-gradient(180deg, var(--headline-from) 30%, var(--headline-mid) 74%, var(--headline-to) 100%);
-  -webkit-background-clip: text;
-          background-clip: text;
-  color: transparent;
 }
+
 .auth-page .auth-heading p {
-  max-width: 52ch;
-  margin-top: 16px;
-  color: var(--muted);
-  font-size: 17px;
-  font-weight: 500;
-  line-height: 1.6;
+  max-width: none;
+  margin: 20px 0 0;
+  color: #23262d;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(20px, 1.7vw, 25px);
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .auth-page .auth-panel {
-  width: min(100%, 520px);
-  padding: 30px 32px 28px;
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(14px) saturate(140%);
-}
-/* A thread of the halo's own spectrum across the top of the card. */
-.auth-page .auth-panel::before {
-  height: 3px;
-  opacity: .8;
-  background: linear-gradient(90deg, #ff6a3d, #a8ff3c, #33c9ff, #6a5cff, #d24bff, #ff3d8b);
+  position: relative;
+  width: min(100%, 560px);
+  overflow: visible;
+  padding: 34px 36px 30px;
+  border: 1px solid var(--auth-line);
+  border-radius: 30px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(10, 28, 60, .07);
+  backdrop-filter: none;
 }
 
-.auth-page .auth-form { gap: 16px; }
-.auth-page .auth-form label { color: var(--muted); font-size: 13px; font-weight: 650; }
-.auth-page .auth-form input {
-  height: 50px;
-  padding: 0 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--raise);
-  box-shadow: none;
-  transition: border-color .16s ease, background .16s ease;
-}
-.auth-page .auth-form input::placeholder { color: var(--muted-soft); }
-.auth-page .auth-form input:hover { background: var(--raise-hover); }
-.auth-page .auth-form input:focus { outline: 3px solid var(--focus); border-color: var(--text); }
-
-/* The pill is the landing's call to action; the form's primary button is the
-   same object at form scale. */
 .auth-page .button {
   min-height: 52px;
-  border-radius: 999px;
-  font-size: 15px;
-  font-weight: 680;
-  letter-spacing: -.01em;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -.012em;
 }
-.auth-page .button-primary { color: var(--solid-ink); background: var(--solid); box-shadow: var(--shadow); }
-.auth-page .button-primary:hover:not(:disabled) { background: var(--solid-hover); }
-/* Google supplies the mark and asks that it keep its own colours, so the button
-   is a light surface rather than the inverted primary — a four-colour glyph on
-   near-black reads as a sticker. */
+
 .auth-page .button-google {
   width: 100%;
-  color: #1f1f1f;
+  color: #1d2026;
+  border: 1px solid #d4d7dd;
   background: #ffffff;
-  border: 1px solid rgba(255, 255, 255, .82);
-  box-shadow: var(--shadow);
+  box-shadow: 0 1px 2px rgba(10, 28, 60, .05);
 }
-.auth-page .button-google:hover:not(:disabled) { background: #ececee; }
-.auth-page .button-secondary {
-  color: var(--text);
-  border: 1px solid var(--line-strong);
-  background: var(--raise);
-  box-shadow: none;
-}
-.auth-page .button-secondary:hover:not(:disabled) { border-color: var(--line-strong); background: var(--raise-hover); }
-.auth-page .button-quiet { color: var(--muted); background: transparent; }
 
-.auth-page .text-link,
-.auth-page .form-footer a,
-.auth-page .status-message a {
-  color: var(--text);
-  font-weight: 620;
+.auth-page .button-google:hover:not(:disabled) {
+  border-color: #bcc2cc;
+  background: linear-gradient(180deg, #ffffff, #f5f7fb);
+  box-shadow: 0 6px 16px rgba(10, 28, 60, .08);
+}
+
+.auth-page .button-primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--auth-navy), var(--auth-navy-soft));
+  box-shadow: 0 10px 24px rgba(10, 28, 60, .16);
+}
+
+.auth-page .button-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #06152f, #102f60);
+}
+
+.auth-legal {
+  margin: 16px 0 0;
+  color: var(--auth-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.auth-legal a {
+  color: var(--auth-navy-soft);
   text-decoration: underline;
-  text-decoration-color: var(--line-strong);
+  text-decoration-color: rgba(24, 59, 115, .34);
   text-underline-offset: 3px;
-  transition: text-decoration-color .16s ease;
 }
-.auth-page .text-link:hover,
-.auth-page .form-footer a:hover,
-.auth-page .status-message a:hover { color: var(--text); text-decoration-color: var(--text); }
 
-.auth-page .form-footer,
-.auth-page .field-note,
-.auth-page .legal-copy,
-.auth-page .auth-security-note { color: var(--muted-soft); }
-.auth-page .auth-security-note { margin-top: 24px; }
+.auth-legal a:hover { text-decoration-color: currentColor; }
 
 .auth-page .form-error,
-.auth-page .form-success { border-radius: 10px; border-style: solid; border-width: 1px; }
-/* Supabase's own words, set apart from ours: monospace and quiet, because it is
-   a diagnostic rather than a message written for the person reading it. */
+.auth-page .form-success,
+.auth-page .error-detail { border-radius: 10px; }
+
+.auth-page .form-error {
+  color: #7f1d1d;
+  border-color: #f3c8c4;
+  background: #fff5f4;
+}
+
 .auth-page .error-detail {
   margin: -4px 0 0;
   padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--raise);
-  color: var(--muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--auth-muted);
+  background: #f5f6f8;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
   line-height: 1.55;
   word-break: break-word;
 }
-.auth-page .form-error { color: var(--danger-ink); background: var(--danger-bg); border-color: var(--danger-line); }
-.auth-page .form-success { color: var(--ok-ink); background: var(--ok-bg); border-color: var(--ok-line); }
 
-@media (max-width: 640px) {
-  .auth-page { padding: 32px 16px 40px; place-items: start center; }
-  .auth-page .auth-brand { margin-bottom: 26px; }
-  .auth-page .auth-heading { margin-bottom: 24px; }
-  .auth-page .auth-heading h1 { font-size: 30px; }
-  .auth-page .auth-heading p { margin-top: 14px; font-size: 16px; }
-  .auth-page .auth-panel { width: 100%; padding: 24px 20px 22px; border-radius: 14px; }
-  .auth-page .auth-form input, .auth-page .button { min-height: 48px; }
-  /* Sized off viewport width alone the halo collapses into a band on a tall
-     phone screen; upright proportions fill it instead. */
-  .auth-aura { width: 132vw; aspect-ratio: .95; }
+@media (max-width: 900px) {
+  .auth-main {
+    grid-template-columns: 1fr;
+    padding-top: 48px;
+    padding-bottom: 80px;
+  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .auth-aura { animation: none; }
+@media (max-width: 640px) {
+  .auth-header {
+    min-height: 78px;
+    gap: 18px;
+    padding: 16px 20px;
+  }
+  .auth-page .auth-brand { gap: 8px; font-size: 21px; }
+  .auth-brand-logo { width: 34px; height: 34px; }
+  .auth-nav { gap: 16px; }
+  .auth-nav a { font-size: 14px; }
+  .auth-main { padding: 42px 16px 56px; }
+  .auth-page .auth-heading { margin-bottom: 28px; }
+  .auth-page .auth-heading h1 { font-size: clamp(43px, 13.5vw, 58px); }
+  .auth-page .auth-heading p { margin-top: 16px; font-size: 20px; }
+  .auth-page .auth-panel { padding: 26px 20px 22px; border-radius: 24px; }
+}
+
+@media (max-width: 410px) {
+  .auth-header { align-items: flex-start; }
+  .auth-nav { gap: 12px; padding-top: 6px; }
+  .auth-nav a { font-size: 13px; }
 }
 
 /* ---------- Full-screen workspace shell (Notion / NotebookLM style) ---------- */
