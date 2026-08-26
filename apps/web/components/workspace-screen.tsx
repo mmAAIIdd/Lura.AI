@@ -23,6 +23,7 @@ import {
   type User,
   type WorkspaceDocument,
 } from "@/lib/api";
+import { marketingUrl } from "@/lib/marketing-url";
 import { buildReleaseComparisons, groupFeedbackByTopic, seedDemoData } from "@/lib/workspace-data";
 
 export function WorkspaceScreen() {
@@ -43,6 +44,10 @@ export function WorkspaceScreen() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* Whether signing in is what would fix the failure. A backend that is not
+     deployed yet is not, and offering "Войти" to someone who has just signed in
+     reads as the sign-in having failed. */
+  const [signInFixes, setSignInFixes] = useState(false);
 
   const loadWorkspaceData = useCallback(async (projectId: string) => {
     const [loadedDocuments, loadedSummary, loadedReleases, loadedFeedback, loadedMetrics] = await Promise.all([
@@ -76,10 +81,17 @@ export function WorkspaceScreen() {
       } catch (loadError) {
         if (loadError instanceof ApiError && loadError.status === 401) {
           setError("Войдите в аккаунт, чтобы открыть рабочее пространство.");
+          setSignInFixes(true);
           router.replace(getLoginPath(pathname));
           return;
         }
-        setError("Не удалось загрузить рабочее пространство.");
+        // Anything else is the projects service: unreachable, or not deployed
+        // at all. The visitor holds a valid session either way, so naming this
+        // a sign-in problem would send them in a circle.
+        setError(
+          "Рабочее пространство пока не подключено. Вы вошли в аккаунт — проекты и разговоры хранит отдельный сервис, он появится позже.",
+        );
+        setSignInFixes(false);
       } finally {
         setLoading(false);
       }
@@ -153,7 +165,12 @@ export function WorkspaceScreen() {
   if (!user || !project) {
     return (
       <main className="ws-boot">
-        <p>{error ?? "Рабочее пространство недоступно."} <Link href="/login">Войти</Link></p>
+        <p>{error ?? "Рабочее пространство недоступно."}</p>
+        {signInFixes ? (
+          <p><Link href="/login">Войти</Link></p>
+        ) : (
+          marketingUrl() ? <p><a href={marketingUrl()!}>Вернуться на сайт</a></p> : null
+        )}
       </main>
     );
   }

@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 
-const marketingUrl = process.env.NEXT_PUBLIC_MARKETING_URL ?? "http://localhost:3000";
+import { marketingUrl } from "@/lib/marketing-url";
 
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+  const home = marketingUrl();
+
   return (
     <main className="auth-page">
 {/* The marketing landing's halo, so arriving here reads as the same site
@@ -10,10 +12,19 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
       <div className="auth-aura" aria-hidden="true" />
 
       <section className="auth-hero" aria-labelledby="auth-title">
-        <a href={marketingUrl} className="brand auth-brand" aria-label="Lura — на главную">
-          <span className="brand-mark">L</span>
-          <span>Lura</span>
-        </a>
+{/* A wordmark with nowhere to go stays a wordmark rather than becoming a
+            link to the visitor's own machine. */}
+        {home ? (
+          <a href={home} className="brand auth-brand" aria-label="Lura — на главную">
+            <span className="brand-mark">L</span>
+            <span>Lura</span>
+          </a>
+        ) : (
+          <span className="brand auth-brand">
+            <span className="brand-mark">L</span>
+            <span>Lura</span>
+          </span>
+        )}
         <div className="auth-heading">
           <h1 id="auth-title">{title}</h1>
           <p>{subtitle}</p>
