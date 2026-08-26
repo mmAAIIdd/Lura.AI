@@ -2,10 +2,21 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getLoginPath } from "@/lib/api";
+import { studioIsOpen } from "@/lib/studio/access";
 import { isSupabaseConfigured, readSupabaseConfig } from "@/lib/supabase/config";
 
 /** Screens a signed-out visitor is allowed to reach. */
 const PUBLIC_PREFIXES = ["/login", "/register", "/auth"];
+
+/**
+ * Рабочее пространство Lura Studio живёт на своём хранилище и своём ключе
+ * Gemini, без Supabase. На машине разработчика оно открывается сразу — иначе
+ * локальная проверка упирается в круг по OAuth. В продакшене остаётся за
+ * авторизацией, пока STUDIO_PUBLIC не разрешит обратное.
+ */
+function openPrefixes(): string[] {
+  return studioIsOpen() ? [...PUBLIC_PREFIXES, "/studio", "/api/studio"] : PUBLIC_PREFIXES;
+}
 
 /** Screens that make no sense once signed in. */
 const SIGNED_OUT_ONLY_PREFIXES = ["/login", "/register"];
@@ -81,7 +92,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const signedIn = Boolean(data?.claims);
   const { pathname, search } = request.nextUrl;
 
-  if (!signedIn && !matchesPrefix(pathname, PUBLIC_PREFIXES)) {
+  if (!signedIn && !matchesPrefix(pathname, openPrefixes())) {
     const redirectUrl = request.nextUrl.clone();
     const loginPath = getLoginPath(`${pathname}${search}`);
     const [loginPathname, loginQuery = ""] = loginPath.split("?");
