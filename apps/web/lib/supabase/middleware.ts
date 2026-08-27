@@ -6,7 +6,16 @@ import { studioIsOpen } from "@/lib/studio/access";
 import { isSupabaseConfigured, readSupabaseConfig } from "@/lib/supabase/config";
 
 /** Screens a signed-out visitor is allowed to reach. */
-const PUBLIC_PREFIXES = ["/login", "/register", "/auth"];
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/register",
+  "/auth",
+  "/capabilities",
+  "/cooperation",
+  "/docs",
+  "/faq",
+  "/pricing",
+];
 
 /**
  * Рабочее пространство Lura Studio живёт на своём хранилище и своём ключе

@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 import { LuraLogo } from "@/components/lura-logo";
-import { marketingUrl } from "@/lib/marketing-url";
+import { SECTIONS } from "@/lib/sections";
 
 type AuthShellProps = {
   title: string;
@@ -12,30 +13,20 @@ type AuthShellProps = {
 };
 
 export function AuthShell({ title, subtitle, children, variant = "login" }: AuthShellProps) {
-  const home = marketingUrl();
-  const capabilitiesUrl = home ? `${home}/capabilities` : undefined;
-  const documentationUrl = home ? `${home}/docs` : undefined;
-  const cooperationUrl = home ? `${home}/cooperation` : undefined;
-
   return (
     <div className={`auth-page auth-page-${variant}`}>
       <header className="auth-header">
-        {home ? (
-          <a href={home} className="brand auth-brand" aria-label="Lura — на главную">
-            <LuraLogo className="auth-brand-logo" />
-            <span>Lura</span>
-          </a>
-        ) : (
-          <span className="brand auth-brand">
-            <LuraLogo className="auth-brand-logo" />
-            <span>Lura</span>
-          </span>
-        )}
+        <Link href="/register" className="brand auth-brand" aria-label="Lura — на главную">
+          <LuraLogo className="auth-brand-logo" />
+          <span>Lura</span>
+        </Link>
 
         <nav className="auth-nav" aria-label="Основная навигация">
-          <a href={capabilitiesUrl} aria-disabled={!capabilitiesUrl}>Возможности</a>
-          <a href={cooperationUrl} aria-disabled={!cooperationUrl}>Сотрудничество</a>
-          <a href={documentationUrl} aria-disabled={!documentationUrl}>Документация</a>
+          {SECTIONS.map(({ href, label }) => (
+            <Link key={href} href={href}>
+              {label}
+            </Link>
+          ))}
         </nav>
       </header>
 
@@ -50,11 +41,7 @@ export function AuthShell({ title, subtitle, children, variant = "login" }: Auth
             {variant === "register" ? (
               <p className="auth-legal">
                 Продолжая, вы подтверждаете, что ознакомились с{" "}
-                {documentationUrl ? (
-                  <a href={documentationUrl}>документацией Lura</a>
-                ) : (
-                  <span>документацией Lura</span>
-                )}.
+                <Link href="/docs">документацией Lura</Link>.
               </p>
             ) : (
               <p className="auth-legal">

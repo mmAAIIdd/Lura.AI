@@ -4,8 +4,7 @@ Lura is a B2B product intelligence platform that connects releases, user feedbac
 
 ## Applications
 
-- `src/` is the existing Vite marketing interface.
-- `apps/web/` is the Next.js client for authentication, accounts, and project composition.
+- `apps/web/` is the whole product: public sections, Google sign-in, account settings and the Lura Studio workspace. There is no landing page and no separate marketing site — the root path redirects to registration.
 - `apps/api/` is the FastAPI backend for users, server-side sessions, OAuth, projects, and component catalogs.
 
 ## Supabase setup
@@ -86,49 +85,34 @@ npx next dev --port 3002
 
 Read [AUTH_ARCHITECTURE.md](AUTH_ARCHITECTURE.md) for the data model, security boundaries, configuration, and available endpoints.
 
-## Deploy on Vercel
+## Развёртывание
 
-`vercel.json` at the root deploys `src/` — the marketing site. It pins the
-build (`vite build` into `dist/`) so the result does not depend on dashboard
-settings, and rewrites every path to `/index.html`.
+Приложение одно: `apps/web`. Разделы сайта, регистрация и рабочее пространство
+живут в нём вместе, поэтому и деплой один — отдельного проекта под маркетинг
+больше нет.
 
-That rewrite is the part worth understanding. The site routes on the client
-with react-router, so `dist/` holds one HTML file. Without the rewrite, only
-`/` resolves; opening `/platform`, `/docs`, or a shared link to any other page
-misses the filesystem and Vercel answers with its own `404: NOT_FOUND` page.
-Static files are matched before rewrites, so `/assets/*` keeps serving the
-real bundles.
+**Куда ставить.** Рабочее пространство держит потоковое соединение всё время
+разбора — от двадцати секунд до нескольких минут. На бессерверной площадке это
+упирается в лимит времени функции: на Vercel Hobby он около минуты, на Pro —
+300 секунд. Всегда включённый контейнер такого ограничения не имеет и обычно
+стоит дешевле: в [apps/web/Dockerfile](apps/web/Dockerfile) уже лежит сборка
+standalone-сервера Next, готовая для Railway, Fly, Render или своего сервера.
 
-Two settings are dashboard-only and `vercel.json` cannot carry them:
+**Если всё-таки Vercel.** Root Directory — `apps/web`; остальное берётся из
+[apps/web/vercel.json](apps/web/vercel.json), и переопределения в панели надо
+выключить, иначе они его перебивают. Файловая система там доступна только для
+чтения, поэтому обязателен `STUDIO_DATABASE_URL` — состояние уходит в Postgres.
 
-- **Root Directory** must stay empty (the repository root). Pointing it at
-  `apps/web` makes Vercel ignore this file entirely.
-- **`VITE_AUTH_APP_URL`** must hold the origin the auth app answers on. The
-  `http://localhost:3001` default applies only when the site is itself served
-  from localhost, so a deployment without this set does not send visitors to
-  their own machine; `/login` and `/register` explain that accounts are not
-  connected yet. Add the variable and redeploy once `apps/web` is up. Setting
-  it to this site's own origin, or adding it with no value at all, is treated
-  the same as leaving it out — pointing the auth link back at the marketing
-  site is a reload loop, not a redirect.
+**Переменные.** `GEMINI_API_KEY` и `STUDIO_DATABASE_URL` — только серверные.
+`NEXT_PUBLIC_SUPABASE_URL` и `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` нужны для
+входа. `NEXT_PUBLIC_SITE_URL` необязателен: без него ссылки подтверждения
+падают на собственный домен проекта.
 
-`apps/web/` is a second Vercel project — import the same repository again with
-Root Directory `apps/web`. It needs `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and nothing else: sign-in and sign-up
-talk to Supabase directly, and the backend session the workspace runs on is
-opened separately and is allowed to fail, so the auth app works with
-`apps/api/` offline. `NEXT_PUBLIC_SITE_URL` is optional there — without it the
-confirmation links fall back to the project's own production domain.
+**Supabase.** В **Authentication → URL Configuration** укажите домен приложения
+как Site URL и добавьте `https://этот-домен/**` в Redirect URLs. Неизвестный
+Supabase адрес не отвергается громко — ссылка просто уходит на Site URL.
 
-Two steps outside Vercel finish the loop. In Supabase, under **Authentication ->
-URL Configuration**, set the Site URL to the auth app's domain and add
-`https://that-domain/**` to Redirect URLs; a redirect Supabase does not
-recognise is not refused loudly, the link just goes to the Site URL instead.
-Then set `VITE_AUTH_APP_URL` on the marketing project to that same domain and
-redeploy, which is what turns *Вход* from a notice back into a link.
-
-`apps/api/` is a container and does not run on Vercel; it needs a host that runs
-Docker.
+`apps/api/` — контейнер, на Vercel не разворачивается; ему нужен хост с Docker.
 
 ## Current application foundation
 

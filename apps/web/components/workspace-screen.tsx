@@ -24,7 +24,6 @@ import {
   type User,
   type WorkspaceDocument,
 } from "@/lib/api";
-import { marketingUrl } from "@/lib/marketing-url";
 import { buildReleaseComparisons, groupFeedbackByTopic, seedDemoData } from "@/lib/workspace-data";
 
 export function WorkspaceScreen() {
@@ -170,7 +169,7 @@ export function WorkspaceScreen() {
         {signInFixes ? (
           <p><Link href="/login">Войти</Link></p>
         ) : (
-          marketingUrl() ? <p><a href={marketingUrl()!}>Вернуться на сайт</a></p> : null
+          <p><Link href="/capabilities">Вернуться на сайт</Link></p>
         )}
       </main>
     );
