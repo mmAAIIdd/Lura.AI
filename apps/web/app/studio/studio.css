@@ -394,3 +394,6 @@
   .st-stream, .st-composer { padding-inline: 16px; }
   .st-output-head { padding-inline: 16px; }
 }
+
+/* Пока идёт разбор, режим не переключается: отчёт принадлежит своему окну. */
+.st-mode:disabled { cursor: default; opacity: .55; }

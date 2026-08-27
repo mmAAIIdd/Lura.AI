@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 
 /**
  * Рендер отчёта.
@@ -149,7 +149,10 @@ function parseBlocks(source: string): Block[] {
 }
 
 export function ReportMarkdown({ source }: { source: string }) {
-  const blocks = parseBlocks(source);
+  /* Во время потока компонент перерисовывается на каждом токене, а текст к
+     концу отчёта разрастается до тысяч символов: без памяти разбор гоняется
+     заново сотни раз подряд. */
+  const blocks = useMemo(() => parseBlocks(source), [source]);
 
   return (
     <div className="report">

@@ -169,7 +169,7 @@ function toVectorLiteral(vector: number[]): string {
 
 export function createPostgresStore(): StudioStore {
   return {
-    label: "Postgres (Supabase)",
+    label: "Postgres",
 
     async listDocuments() {
       const conn = await db();

@@ -106,7 +106,7 @@ function keywordScore(query: string, chunk: string): number {
 
 export function createFileStore(): StudioStore {
   return {
-    label: `файлы: ${studioDir()}`,
+    label: "файлы",
 
     async listDocuments() {
       const dirs = paths();

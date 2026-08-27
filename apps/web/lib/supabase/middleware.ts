@@ -112,7 +112,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   if (signedIn && matchesPrefix(pathname, SIGNED_OUT_ONLY_PREFIXES)) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/workspace";
+    redirectUrl.pathname = "/studio";
     redirectUrl.search = "";
     return copyCookies(supabaseResponse, NextResponse.redirect(redirectUrl));
   }

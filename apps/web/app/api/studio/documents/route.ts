@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { LIMITS } from "@/lib/studio/config";
+import { fetchPublic } from "@/lib/studio/net";
 import { indexDocument } from "@/lib/studio/rag";
 import {
   StorageUnavailableError,
@@ -63,19 +64,19 @@ async function handleUpload(request: Request) {
     const kind: DocumentKind = body.kind === "business" ? "business" : "source";
 
     if (body.url) {
+      /* Та же проверка, что у инструмента агента: адрес приходит снаружи, и
+         без неё форма загрузки становится способом постучаться во внутреннюю
+         сеть чужими руками. */
+      let response: Response;
       let url: URL;
       try {
-        url = new URL(body.url);
-      } catch {
-        return fail("Ссылка не разобралась.");
+        ({ response, url } = await fetchPublic(body.url, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; LuraStudio/1.0)" },
+        }));
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "Ссылка не открылась.");
       }
-      if (url.protocol !== "http:" && url.protocol !== "https:") return fail("Поддерживаются только http и https.");
-
-      const response = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; LuraStudio/1.0)" },
-        signal: AbortSignal.timeout(25000),
-      }).catch(() => null);
-      if (!response?.ok) return fail(`Страница не открылась${response ? ` (${response.status})` : ""}.`);
+      if (!response.ok) return fail(`Страница не открылась (${response.status}).`);
 
       const raw = (await response.text()).slice(0, 900_000);
       const parsed = htmlToText(raw);

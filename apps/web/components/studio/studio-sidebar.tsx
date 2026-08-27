@@ -59,12 +59,13 @@ export function StudioSidebar(props: Props) {
         <span>Lura</span>
       </div>
 
-      <div className="st-modes" role="tablist" aria-label="Режим вывода">
+      <div className="st-modes" role="group" aria-label="Режим вывода">
         {MODES.map((item) => (
           <button
             key={item.id}
-            role="tab"
-            aria-selected={props.mode === item.id}
+            type="button"
+            aria-pressed={props.mode === item.id}
+            disabled={props.busy}
             className={`st-mode ${props.mode === item.id ? "is-active" : ""}`}
             onClick={() => props.onMode(item.id)}
           >

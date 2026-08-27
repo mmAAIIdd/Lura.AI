@@ -19,8 +19,15 @@ const PLACEHOLDER: Record<StudioMode, string> = {
   updates: "Сделай отчёт по релизу 2.4 и реакции на него",
 };
 
-/* Лимит на вложение: base64 раздувает файл на треть, а окно модели не резиновое. */
-const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+/* Предел на все вложения разом. Тело запроса на бессерверной площадке
+   ограничено примерно 4.5 МБ, а base64 раздувает данные на треть — поэтому
+   считается сумма, а не размер отдельного файла. */
+const MAX_ATTACHMENTS_TOTAL_BYTES = 3 * 1024 * 1024;
+
+/** Сколько весит уже приложенное: base64 длиннее исходных байтов на треть. */
+function attachmentSize(attachment: ComposerAttachment): number {
+  return attachment.text ? attachment.text.length : Math.floor(attachment.data.length * 0.75);
+}
 
 function readAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -48,11 +55,17 @@ export function StudioComposer({ mode, busy, onSend, onStop }: Props) {
   async function attach(files: File[]) {
     setProblem(null);
     const next: ComposerAttachment[] = [];
+    let budget = MAX_ATTACHMENTS_TOTAL_BYTES - attachments.reduce((sum, item) => sum + attachmentSize(item), 0);
+
     for (const file of files.slice(0, 6)) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        setProblem(`«${file.name}» больше 4 МБ — приложите файл поменьше или загрузите его документом.`);
+      if (file.size > budget) {
+        setProblem(
+          `«${file.name}» не помещается: на вложения к одному запросу отведено 3 МБ. ` +
+            "Большой файл лучше загрузить документом в боковой панели.",
+        );
         continue;
       }
+      budget -= file.size;
       try {
         if (file.type.startsWith("image/")) {
           next.push({ name: file.name, mimeType: file.type, data: await readAsBase64(file) });

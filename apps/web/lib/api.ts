@@ -319,8 +319,11 @@ export const luraApi = {
     apiRequest<MetricSnapshot>(`/projects/${projectId}/metrics`, { method: "POST", body: JSON.stringify(input) }, true),
 };
 
+/* Рабочее пространство по умолчанию — /studio. Старый /workspace остаётся
+   доступным, но ходит в FastAPI, и приземлять на него сразу после входа
+   значит показывать пустой экран везде, где backend не развёрнут. */
 export function getSafeNextPath(nextPath: string | null | undefined): string {
-  if (!nextPath || !nextPath.startsWith("/")) return "/workspace";
+  if (!nextPath || !nextPath.startsWith("/")) return "/studio";
 
   try {
     let decoded = nextPath;
@@ -330,19 +333,19 @@ export function getSafeNextPath(nextPath: string | null | undefined): string {
       decoded = nextDecoded;
     }
     if (decoded.startsWith("//") || decoded.includes("\\") || /[\u0000-\u001F\u007F]/u.test(decoded)) {
-      return "/workspace";
+      return "/studio";
     }
 
     const baseOrigin = "https://lura.internal";
     const resolved = new URL(nextPath, baseOrigin);
-    if (resolved.origin !== baseOrigin) return "/workspace";
+    if (resolved.origin !== baseOrigin) return "/studio";
     return `${resolved.pathname}${resolved.search}${resolved.hash}`;
   } catch {
-    return "/workspace";
+    return "/studio";
   }
 }
 
 export function getLoginPath(nextPath: string | null | undefined): string {
   const safeNextPath = getSafeNextPath(nextPath);
-  return safeNextPath === "/workspace" ? "/login" : `/login?next=${encodeURIComponent(safeNextPath)}`;
+  return safeNextPath === "/studio" ? "/login" : `/login?next=${encodeURIComponent(safeNextPath)}`;
 }

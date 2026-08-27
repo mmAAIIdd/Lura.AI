@@ -13,7 +13,21 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        /* Бандлы и шрифты под /_next/static неизменяемы: в имени файла лежит
+           хеш содержимого, и при любой правке меняется имя. Общее правило
+           ниже накрывало их `no-store`, из-за чего браузер выкачивал весь
+           JavaScript заново на каждый заход. */
+        source: "/_next/static/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+      {
+        /* Всё остальное — без кеша: страницы приложения содержат данные
+           конкретного пользователя. Статика исключена явно, иначе правило
+           перекрыло бы её заголовок. */
+        source: "/((?!_next/static|_next/image).*)",
         headers: [
           { key: "Cache-Control", value: "no-store" },
           { key: "Referrer-Policy", value: "no-referrer" },

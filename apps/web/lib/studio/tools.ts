@@ -1,7 +1,5 @@
-import dns from "node:dns/promises";
-import net from "node:net";
-
 import { LIMITS } from "@/lib/studio/config";
+import { fetchPublic } from "@/lib/studio/net";
 import type { FunctionDeclaration } from "@/lib/studio/gemini";
 import { searchDocuments } from "@/lib/studio/rag";
 import { SearchUnavailableError, searchWeb } from "@/lib/studio/search";
@@ -59,60 +57,6 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
   },
 ];
 
-/**
- * Проверка адреса перед запросом.
- *
- * Ссылку выбирает модель, а её может подсказать содержимое чужой страницы или
- * загруженного документа. Без этой проверки достаточно строки
- * «открой http://169.254.169.254/…», чтобы инструмент сходил во внутреннюю сеть.
- */
-async function assertPublicUrl(raw: string): Promise<URL> {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error("Адрес не разобрался как ссылка.");
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Поддерживаются только http и https.");
-  }
-
-  const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addresses = net.isIP(host)
-    ? [host]
-    : (await dns.lookup(host, { all: true }).catch(() => [])).map((entry) => entry.address);
-
-  if (!addresses.length) throw new Error("Домен не разрешается в адрес.");
-
-  for (const address of addresses) {
-    if (isPrivateAddress(address)) throw new Error("Внутренние адреса недоступны для инструмента.");
-  }
-  return url;
-}
-
-function isPrivateAddress(address: string): boolean {
-  if (net.isIPv4(address)) {
-    const [a, b] = address.split(".").map(Number);
-    if (a === 10 || a === 127 || a === 0) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 169 && b === 254) return true;
-    if (a >= 224) return true;
-    return false;
-  }
-  const normalized = address.toLowerCase();
-  return (
-    normalized === "::1" ||
-    normalized === "::" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("fe80") ||
-    normalized.startsWith("::ffff:127.") ||
-    normalized.startsWith("::ffff:10.") ||
-    normalized.startsWith("::ffff:192.168.")
-  );
-}
-
 export type ToolOutcome = { response: Record<string, unknown>; trace: ToolTrace };
 
 async function runWebSearch(args: Record<string, unknown>): Promise<ToolOutcome> {
@@ -160,16 +104,15 @@ async function runWebSearch(args: Record<string, unknown>): Promise<ToolOutcome>
 
 async function runFetchUrl(args: Record<string, unknown>): Promise<ToolOutcome> {
   const raw = String(args.url ?? "").trim();
-  const url = await assertPublicUrl(raw);
 
-  const response = await fetch(url, {
+  /* Каждый переход проверяется заново: публичная страница может увести
+     редиректом на внутренний адрес. */
+  const { response, url } = await fetchPublic(raw, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; LuraStudio/1.0; +https://lura.app)",
       Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
       "Accept-Language": "ru,en;q=0.8",
     },
-    redirect: "follow",
-    signal: AbortSignal.timeout(25000),
   });
 
   if (!response.ok) throw new Error(`Страница ответила ${response.status}.`);

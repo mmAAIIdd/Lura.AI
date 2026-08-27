@@ -46,10 +46,29 @@ type Props = {
 
 export function StudioOutput({ mode, thread, live, error, runtime, onStarter }: Props) {
   const bottom = useRef<HTMLDivElement>(null);
+  const stream = useRef<HTMLDivElement>(null);
+  /* Прокрутка «прилипает» к низу, только пока пользователь сам оттуда не ушёл.
+     Иначе прочитать начало отчёта, пока агент дописывает конец, невозможно. */
+  const stick = useRef(true);
   const messages = thread?.messages ?? [];
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
+    const node = stream.current;
+    if (!node) return;
+    const onScroll = () => {
+      stick.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+    };
+    node.addEventListener("scroll", onScroll, { passive: true });
+    return () => node.removeEventListener("scroll", onScroll);
+  }, []);
+
+  /* Свой новый запрос всегда возвращает вниз: его отправили только что. */
+  useEffect(() => {
+    stick.current = true;
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (stick.current) bottom.current?.scrollIntoView({ block: "end" });
   }, [messages.length, live?.text, live?.tools.length]);
 
   const empty = !messages.length && !live && !error;
@@ -73,7 +92,7 @@ export function StudioOutput({ mode, thread, live, error, runtime, onStarter }: 
         </div>
       </header>
 
-      <div className="st-stream">
+      <div className="st-stream" ref={stream}>
         {empty ? (
           <div className="st-starters">
             <p>
