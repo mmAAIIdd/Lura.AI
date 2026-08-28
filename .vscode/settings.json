@@ -9,8 +9,32 @@
 
   // Type-check with the TypeScript pinned in package.json instead of the copy
   // bundled with the editor, so the IDE and `npm run lint` cannot disagree.
-  "typescript.tsdk": "node_modules/typescript/lib",
+  // The path is `apps/web/...` because the application is the only Node
+  // package left: the Vite site at the repository root was removed when the
+  // sections moved into it, and with it the root `node_modules`. A tsdk path
+  // that does not exist makes the editor fall back silently and disagree with
+  // the build.
+  "typescript.tsdk": "apps/web/node_modules/typescript/lib",
 
   // The API has no virtualenv; its packages live in the global interpreter.
-  "python.analysis.extraPaths": ["apps/api"]
+  "python.analysis.extraPaths": ["apps/api"],
+
+  // Каталоги, которые не являются исходным кодом продукта: скачанные наборы
+  // навыков, сборка Next, состояние рабочего пространства и старые скриншоты.
+  // В индексации и слежении за файлами они только мешают — в частности,
+  // .agents содержит примеры на TypeScript с импортами пакетов, которых в
+  // проекте нет, и редактор подчёркивает их красным.
+  "search.exclude": {
+    "**/.agents": true,
+    "**/.next": true,
+    "**/.lura-studio": true,
+    "**/output": true,
+    "**/node_modules": true
+  },
+  "files.watcherExclude": {
+    "**/.agents/**": true,
+    "**/.next/**": true,
+    "**/.lura-studio/**": true,
+    "**/node_modules/**": true
+  }
 }

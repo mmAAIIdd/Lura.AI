@@ -2,7 +2,6 @@ import postgres from "postgres";
 
 import {
   StorageUnavailableError,
-  type ChunkHit,
   type DocumentDraft,
   type StudioDocument,
   type StudioStore,
