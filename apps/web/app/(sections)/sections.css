@@ -237,66 +237,6 @@
 .public-output-list strong { font-size: 15px; font-weight: 660; }
 .public-output-list span { color: var(--muted); font-size: 15px; line-height: 1.55; }
 
-/* ---------- Документация ---------- */
-.public-docs {
-  display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
-  gap: clamp(32px, 5vw, 72px);
-  align-items: start;
-  padding-block: clamp(40px, 5vw, 64px);
-}
-
-.public-docs-nav {
-  position: sticky;
-  top: calc(var(--header-h) + 16px);
-  display: grid;
-  gap: 2px;
-  align-content: start;
-}
-
-.public-docs-nav a { padding: 8px 10px; border-radius: 7px; color: var(--muted); font-size: 14px; font-weight: 560; }
-.public-docs-nav a:hover { color: var(--text); background: var(--bg-soft); }
-
-.public-docs-body { display: grid; gap: clamp(44px, 5vw, 68px); min-width: 0; max-width: 760px; }
-.public-docs-section { scroll-margin-top: calc(var(--header-h) + 20px); }
-.public-docs-section h2 { margin: 10px 0 0; font-size: clamp(24px, 2.6vw, 32px); letter-spacing: -.03em; }
-.public-docs-section > p { max-width: 680px; margin: 14px 0 0; color: var(--muted); font-size: 16px; line-height: 1.65; }
-
-.public-docs-list { margin: 22px 0 0; padding: 0; border-top: 1px solid var(--line); }
-
-.public-docs-list > div,
-.public-docs-list > li {
-  display: grid;
-  grid-template-columns: 110px 1fr;
-  gap: 18px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-  list-style: none;
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-.public-docs-list dt,
-.public-docs-list strong { color: var(--text); font-weight: 620; }
-.public-docs-list code { color: var(--text); font-family: var(--font-mono); font-size: 14px; }
-.public-docs-list dd,
-.public-docs-list span { margin: 0; color: var(--muted); }
-.public-docs-list .is-planned { color: #8a8f98; }
-.public-docs-list-wide > div { grid-template-columns: 230px 1fr; }
-.public-docs-list > li { grid-template-columns: 44px 1fr; gap: 14px; }
-.public-docs-index { color: #8a8f98; font-family: var(--font-mono); font-size: 13px; }
-
-.public-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-
-.public-tags span {
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 5px 10px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
-
 /* ---------- Финальный блок и подвал ---------- */
 .public-cta-section { padding-block: clamp(52px, 6vw, 80px); }
 .public-cta-section-inner { display: flex; align-items: flex-end; justify-content: space-between; gap: 36px; }
@@ -323,8 +263,6 @@
   .public-feature-row { grid-template-columns: 38px 28px 1fr; gap: 16px; }
   .public-feature-row p { grid-column: 3; }
   .public-output-grid { grid-template-columns: 1fr; gap: 36px; }
-  .public-docs { grid-template-columns: 1fr; gap: 28px; }
-  .public-docs-nav { position: static; grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; padding-bottom: 4px; }
   .public-cta-section-inner { align-items: flex-start; flex-direction: column; }
   .public-cta-section .public-cta-row { margin-top: 0; }
 }
@@ -347,9 +285,7 @@
   .public-feature-row { grid-template-columns: 30px 26px 1fr; gap: 12px; padding-block: 20px; }
   .public-feature-row h2 { font-size: 17px; }
   .public-feature-row p { font-size: 14px; }
-  .public-output-list > div,
-  .public-docs-list > div,
-  .public-docs-list-wide > div { grid-template-columns: 1fr; gap: 6px; }
+  .public-output-list > div { grid-template-columns: 1fr; gap: 6px; }
   .public-cta-section-inner { gap: 24px; }
   .public-footer-main { grid-template-columns: 1fr; gap: 32px; }
 }
@@ -399,3 +335,69 @@
 /* Абзацы политики: в «Вопросах» ответ один, здесь их несколько подряд. */
 .public-policy-body { display: grid; gap: 10px; }
 .public-policy-body p { color: var(--muted); font-size: 15px; line-height: 1.65; }
+
+/* ---------- Простой документ ----------
+   Для политики и документации: одна колонка, крупный заголовок, дальше текст
+   сверху вниз. Ни плашек, ни сеток, ни блоков с призывом — читателю такого
+   документа нужен текст, а не оформление вокруг него. */
+
+.public-doc {
+  width: min(100% - 48px, 720px);
+  margin-inline: auto;
+  padding-block: clamp(48px, 7vw, 88px) clamp(64px, 9vw, 120px);
+}
+
+.public-doc h1 {
+  margin: 0;
+  font-size: clamp(38px, 5.5vw, 62px);
+  line-height: 1.05;
+  letter-spacing: -.04em;
+  text-align: center;
+}
+
+.public-doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: clamp(32px, 5vw, 56px);
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.public-doc-intro { margin-top: 26px; color: var(--text); font-size: 17px; line-height: 1.75; }
+
+.public-doc h2 {
+  margin: 42px 0 0;
+  font-size: 22px;
+  font-weight: 640;
+  letter-spacing: -.02em;
+}
+
+.public-doc h3 { margin: 26px 0 0; font-size: 17px; font-weight: 640; }
+.public-doc p { margin: 14px 0 0; font-size: 16px; line-height: 1.75; }
+.public-doc a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+.public-doc ul,
+.public-doc ol { margin: 14px 0 0; padding-left: 22px; }
+.public-doc li { margin-top: 8px; font-size: 16px; line-height: 1.7; }
+.public-doc li strong { font-weight: 640; }
+
+.public-doc code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-soft);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+/* Оглавление — обычный список ссылок, а не липкая панель сбоку. */
+.public-doc-toc { margin-top: 30px; padding: 0; list-style: none; }
+.public-doc-toc li { margin-top: 6px; padding-left: 0; font-size: 16px; }
+
+@media (max-width: 640px) {
+  .public-doc { width: min(100% - 32px, 720px); }
+  .public-doc-meta { flex-direction: column; gap: 4px; }
+}
