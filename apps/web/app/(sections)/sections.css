@@ -395,3 +395,7 @@
   .public-faq article { grid-template-columns: 1fr; gap: 8px; }
   .public-plans { grid-template-columns: 1fr; }
 }
+
+/* Абзацы политики: в «Вопросах» ответ один, здесь их несколько подряд. */
+.public-policy-body { display: grid; gap: 10px; }
+.public-policy-body p { color: var(--muted); font-size: 15px; line-height: 1.65; }

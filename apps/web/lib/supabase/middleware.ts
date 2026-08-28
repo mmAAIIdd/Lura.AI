@@ -15,6 +15,7 @@ const PUBLIC_PREFIXES = [
   "/docs",
   "/faq",
   "/pricing",
+  "/privacy",
 ];
 
 /**

@@ -32,6 +32,8 @@ export default function SectionsLayout({ children }: { children: ReactNode }) {
                 {label}
               </Link>
             ))}
+            {/* В шапке политике не место, а в подвале её и ищут. */}
+            <Link href="/privacy">Политика конфиденциальности</Link>
           </div>
         </div>
         <div className="public-footer-note">© 2026 Lura. Факты и гипотезы в выводах разделены.</div>

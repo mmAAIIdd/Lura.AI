@@ -300,46 +300,6 @@ button, input, select, textarea { font: inherit; }
   background: #ffffff;
 }
 
-.auth-pitch {
-  width: min(100%, 640px);
-  margin-top: 46px;
-  text-align: left;
-}
-
-.auth-pitch-lead {
-  margin: 0;
-  color: #24272e;
-  font-size: 19px;
-  line-height: 1.6;
-}
-
-.auth-pitch-list {
-  margin: 26px 0 0;
-  padding: 0;
-  border-top: 1px solid var(--auth-line);
-  list-style: none;
-}
-
-.auth-pitch-list li {
-  display: grid;
-  gap: 5px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--auth-line);
-}
-
-.auth-pitch-list strong {
-  color: var(--auth-ink);
-  font-size: 17px;
-  font-weight: 640;
-  letter-spacing: -.015em;
-}
-
-.auth-pitch-list span {
-  color: var(--auth-muted);
-  font-size: 16px;
-  line-height: 1.55;
-}
-
 .auth-art {
   display: grid;
   width: min(100%, 520px);
@@ -465,8 +425,6 @@ button, input, select, textarea { font: inherit; }
   .auth-page .auth-heading p { margin-top: 16px; font-size: 19px; }
   .auth-page .auth-panel { padding: 26px 20px 22px; border-radius: 16px; }
   .auth-page .button { min-height: 56px; font-size: 16px; }
-  .auth-pitch { margin-top: 34px; }
-  .auth-pitch-lead { font-size: 17px; }
   .auth-art { margin-top: 42px; }
   .auth-art-frame { border-radius: 22px; }
   .auth-art figcaption { margin-top: 12px; font-size: clamp(24px, 7vw, 32px); }

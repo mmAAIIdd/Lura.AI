@@ -40,8 +40,8 @@ export function AuthShell({ title, subtitle, children, variant = "login" }: Auth
             {children}
             {variant === "register" ? (
               <p className="auth-legal">
-                Продолжая, вы подтверждаете, что ознакомились с{" "}
-                <Link href="/docs">документацией Lura</Link>.
+                Продолжая, вы соглашаетесь с{" "}
+                <Link href="/privacy">политикой конфиденциальности</Link>.
               </p>
             ) : (
               <p className="auth-legal">
@@ -50,32 +50,6 @@ export function AuthShell({ title, subtitle, children, variant = "login" }: Auth
             )}
           </div>
 
-          {/* Первый экран должен отвечать на «что я с этого получу», иначе
-              кнопка входа висит без причины. Только на регистрации: на экране
-              ошибки этот текст отвлекал бы от того, что делать дальше. */}
-          {variant === "register" ? (
-            <section className="auth-pitch" aria-label="О продукте">
-              <p className="auth-pitch-lead">
-                Вы выпускаете обновления, а клиенты отвечают — отзывами, оценками, тем, как
-                они пользуются продуктом. Lura слушает этот ответ за вас и показывает, что из
-                сделанного сработало.
-              </p>
-              <ul className="auth-pitch-list">
-                <li>
-                  <strong>Видно, что изменилось после релиза</strong>
-                  <span>Не «выкатили и надеемся»: где клиенту стало легче, а где вы задели живое.</span>
-                </li>
-                <li>
-                  <strong>Сотни отзывов — в несколько понятных тем</strong>
-                  <span>Люди пишут об одном и том же разными словами. Lura собирает это в проблемы и показывает, какие из них растут.</span>
-                </li>
-                <li>
-                  <strong>Понятно, за что браться завтра</strong>
-                  <span>Факт, догадка и рекомендация не свалены в кучу — решение остаётся за вами, но уже с опорой.</span>
-                </li>
-              </ul>
-            </section>
-          ) : null}
         </section>
 
         <figure className="auth-art">
