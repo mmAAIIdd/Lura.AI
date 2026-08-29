@@ -1,4 +1,5 @@
-import { API_ROOT, geminiKey, modelChain } from "@/lib/studio/config";
+import { API_ROOT, allModels, geminiKey } from "@/lib/studio/config";
+import { decodeEntities } from "@/lib/studio/text";
 
 /**
  * Поиск в интернете для агента.
@@ -42,16 +43,6 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function decodeEntities(value: string): string {
-  return value
-    .replace(/&#x27;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&");
-}
 
 function stripTags(value: string): string {
   return decodeEntities(value.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
@@ -124,7 +115,7 @@ async function geminiGrounding(query: string, limit: number): Promise<SearchResu
 
   /* Перебор по цепочке моделей: у основной может не быть квоты, и запрос к
      grounding через неё падает раньше, чем начнётся поиск. */
-  for (const model of modelChain()) {
+  for (const model of allModels()) {
     const response = await fetch(`${API_ROOT}/models/${model}:generateContent?key=${key}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -217,19 +208,37 @@ function parseDuckResults(html: string, limit: number): SearchResult[] {
   return results;
 }
 
-async function duckduckgo(query: string, limit: number): Promise<SearchResult[]> {
-  const attempts = [
-    { url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, wait: 0 },
-    { url: `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, wait: 1500 },
-    { url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, wait: 4000 },
-  ];
+/**
+ * Попытки идут по разным адресам и разными методами.
+ *
+ * 202 с пустой страницей — это придержанный запрос, а не отсутствие
+ * результатов, и приходит он на конкретную комбинацию «адрес + метод».
+ * Форма (POST) и облегчённая версия придерживаются отдельно от обычной
+ * выдачи, поэтому перебор из четырёх вариантов с нарастающей паузой
+ * вытаскивает ответ там, где один повтор того же запроса упирался в отказ.
+ */
+const DUCK_ATTEMPTS = [
+  { host: "https://html.duckduckgo.com/html/", method: "POST", wait: 0 },
+  { host: "https://lite.duckduckgo.com/lite/", method: "GET", wait: 900 },
+  { host: "https://html.duckduckgo.com/html/", method: "GET", wait: 2500 },
+  { host: "https://lite.duckduckgo.com/lite/", method: "POST", wait: 5000 },
+] as const;
 
+async function duckduckgo(query: string, limit: number): Promise<SearchResult[]> {
   let problem = "DuckDuckGo вернул пустую выдачу";
 
-  for (const attempt of attempts) {
+  for (const attempt of DUCK_ATTEMPTS) {
     if (attempt.wait) await sleep(attempt.wait);
-    const response = await fetch(attempt.url, {
-      headers: { "User-Agent": UA, "Accept-Language": "ru,en;q=0.8" },
+
+    const post = attempt.method === "POST";
+    const response = await fetch(post ? attempt.host : `${attempt.host}?q=${encodeURIComponent(query)}`, {
+      method: attempt.method,
+      headers: {
+        "User-Agent": UA,
+        "Accept-Language": "ru,en;q=0.8",
+        ...(post ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+      },
+      body: post ? `q=${encodeURIComponent(query)}` : undefined,
       signal: AbortSignal.timeout(20000),
     }).catch(() => null);
 
@@ -300,9 +309,14 @@ export async function searchWeb(
     }
   }
 
+  /* Наружу — что искать не получилось и что с этим делать; какие именно
+     провайдеры отказали, остаётся в логе сервера. Названия поставщиков в
+     ответе агента выглядят как утечка внутренностей, а команде они ничего
+     не объясняют. */
+  console.warn(`[studio] поиск недоступен: ${failures.join("; ")}`);
   lastFailure =
-    `Поиск в интернете сейчас недоступен: ${failures.join("; ")}. ` +
-    "Подключите биллинг к проекту Gemini (тогда заработает googleSearch) или задайте BRAVE_API_KEY.";
+    "Поиск в интернете сейчас недоступен: ни один источник выдачи не ответил. " +
+    "Дайте прямую ссылку — её Lura откроет и прочитает, — или задайте ключ поиска (BRAVE_API_KEY или TAVILY_API_KEY) на сервере.";
   unavailableUntil = Date.now() + UNAVAILABLE_COOLDOWN_MS;
   throw new SearchUnavailableError(lastFailure);
 }

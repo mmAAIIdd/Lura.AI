@@ -8,6 +8,12 @@
 
 export type DocumentKind = "business" | "source";
 
+/** Публичные имена моделей. За ними стоят разные модели провайдера. */
+export type LuraModel = "lura-pro" | "lura-fast";
+
+/** Разговор или полный разбор по пайплайну — зависит от команды в запросе. */
+export type RunMode = "chat" | "report";
+
 export type StudioDocument = {
   id: string;
   title: string;
@@ -32,7 +38,8 @@ export type StudioMessage = {
   role: "user" | "agent";
   text: string;
   createdAt: string;
-  model?: string;
+  model?: LuraModel;
+  mode?: RunMode;
   tools?: ToolTrace[];
   attachments?: { name: string; mime: string }[];
   artifactId?: string;
@@ -53,7 +60,7 @@ export type WorkspaceState = {
   threads: ThreadSummary[];
   runtime: {
     ready: boolean;
-    models: string[];
+    models: LuraModel[];
     search: "gemini" | "brave" | "tavily" | "duckduckgo" | null;
     storage: string;
   };

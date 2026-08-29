@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { geminiKey, modelChain } from "@/lib/studio/config";
+import { LURA_MODELS, geminiKey } from "@/lib/studio/config";
 import { currentProvider } from "@/lib/studio/search";
 import { StorageUnavailableError, listDocuments, listThreads, storeLabel } from "@/lib/studio/store";
 
@@ -25,7 +25,7 @@ export async function GET() {
     threads,
     runtime: {
       ready: Boolean(geminiKey()),
-      models: modelChain(),
+      models: LURA_MODELS,
       search: currentProvider(),
       storage: storeLabel(),
     },

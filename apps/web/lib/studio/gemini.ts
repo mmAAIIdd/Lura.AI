@@ -1,4 +1,4 @@
-import { API_ROOT, EMBED_MODEL, geminiKey, modelChain } from "@/lib/studio/config";
+import { API_ROOT, EMBED_MODEL, geminiKey } from "@/lib/studio/config";
 
 /**
  * Клиент Gemini: генерация с инструментами и эмбеддинги.
@@ -54,7 +54,7 @@ function keyOrThrow(): string {
   const key = geminiKey();
   if (!key) {
     throw new GeminiError(
-      "Не задан GEMINI_API_KEY. Добавьте ключ в apps/web/.env.local и перезапустите рабочее пространство.",
+      "Не задан ключ модели. Добавьте GEMINI_API_KEY в apps/web/.env.local и перезапустите рабочее пространство.",
       0,
       false,
     );
@@ -128,8 +128,10 @@ type GenerateOptions = {
   contents: Content[];
   tools?: FunctionDeclaration[];
   signal?: AbortSignal;
-  /** Модель, выбранная на предыдущем шаге, чтобы не искать её заново. */
-  model?: string;
+  /** Цепочка провайдерских моделей за выбранным именем Lura. */
+  chain: string[];
+  /** Модель, ответившая на предыдущем шаге, чтобы не искать её заново. */
+  pinned?: string;
 };
 
 function payload(options: GenerateOptions) {
@@ -154,10 +156,11 @@ export async function* streamTurn(options: GenerateOptions): AsyncGenerator<Stre
   /* Выбранная на первом ходу модель идёт первой, но не единственной: квота
      заканчивается и посреди разбора, и упереться в неё на пятом ходу — значит
      потерять всю уже проделанную работу. */
-  const chain = modelChain();
-  const candidates = options.model
-    ? [options.model, ...chain.filter((name) => name !== options.model)]
+  const chain = options.chain.length ? options.chain : [];
+  const candidates = options.pinned
+    ? [options.pinned, ...chain.filter((name) => name !== options.pinned)]
     : chain;
+  if (!candidates.length) throw new GeminiError("Не настроена ни одна модель.", 0, false);
   const failures: string[] = [];
 
   for (const model of candidates) {
@@ -183,7 +186,8 @@ export async function* streamTurn(options: GenerateOptions): AsyncGenerator<Stre
       failures.push(`${model}: ${reason}`);
       /* Недоступна именно эта модель — пробуем следующую в цепочке. */
       if ((modelUnavailable(status) || transient(status)) && model !== candidates[candidates.length - 1]) continue;
-      throw new GeminiError(reason, status, transient(status));
+      console.warn(`[studio] ${model}: ${reason}`);
+      throw new GeminiError("Модель не смогла ответить на запрос. Попробуйте ещё раз.", status, transient(status));
     }
 
     yield { type: "model", model };
@@ -243,8 +247,11 @@ export async function* streamTurn(options: GenerateOptions): AsyncGenerator<Stre
     return;
   }
 
+  /* Что именно ответил провайдер — в лог: в интерфейсе это и бесполезно, и
+     раскрывает внутренности, которые наружу не показываются. */
+  console.warn(`[studio] ни одна модель не ответила: ${failures.join(" | ")}`);
   throw new GeminiError(
-    `Ни одна из моделей не ответила. ${failures.join(" | ")}`,
+    "Модель сейчас недоступна: закончилась квота или сервис перегружен. Попробуйте lura-fast или повторите через минуту.",
     429,
     false,
   );

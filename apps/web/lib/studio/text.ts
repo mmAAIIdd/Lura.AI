@@ -44,7 +44,8 @@ const ENTITIES: Record<string, string> = {
   laquo: "«", raquo: "»", hellip: "…", rsquo: "’", lsquo: "‘", ldquo: "“", rdquo: "”",
 };
 
-function decodeEntities(value: string): string {
+/** Мнемоники и числовые ссылки в обычный текст. Нужен и разбору страниц, и выдаче поиска. */
+export function decodeEntities(value: string): string {
   return value
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))

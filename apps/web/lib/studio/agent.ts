@@ -1,6 +1,14 @@
-import { LIMITS, MAX_TOOL_ROUNDS } from "@/lib/studio/config";
+import {
+  LIMITS,
+  MAX_CHAT_TOOL_ROUNDS,
+  MAX_TOOL_ROUNDS,
+  asLuraModel,
+  modelChain,
+  type LuraModel,
+} from "@/lib/studio/config";
+import { parsePrompt, titleFrom, type RunMode } from "@/lib/studio/command";
 import { GeminiError, streamTurn, type Content, type Part } from "@/lib/studio/gemini";
-import { buildSystemInstruction, threadTitleFrom } from "@/lib/studio/prompt";
+import { buildSystemInstruction } from "@/lib/studio/prompt";
 import { searchDocuments } from "@/lib/studio/rag";
 import {
   businessDocument,
@@ -20,25 +28,31 @@ import { TOOL_DECLARATIONS, runTool } from "@/lib/studio/tools";
 /**
  * Цикл агента.
  *
- * Модель ходит по пайплайну сама, но каждый её вызов инструмента исполняется
- * здесь и возвращается ей результатом. Наверх при этом уходят события — что
- * агент сейчас делает — чтобы окно вывода показывало работу, а не спиннер.
+ * Модель ходит по инструментам сама, но каждый её вызов исполняется здесь и
+ * возвращается ей результатом. Наверх при этом уходят события — что агент
+ * сейчас делает — чтобы окно вывода показывало работу, а не спиннер.
+ *
+ * Режим определяется командой в самом запросе: «/lur manager-dev start»
+ * включает разбор по пайплайну, всё остальное — обычный разговор. От режима
+ * зависят и системная инструкция, и бюджет времени: ждать две минуты ответа
+ * на «привет» никто не станет.
  */
 
 export type Attachment = { name: string; mimeType: string; data: string; text?: string };
 
-/* Общий бюджет на разбор. За ним агент дописывает ответ на собранном, а не
-   продолжает искать: незавершённый разбор бесполезен, каким бы полным он ни
-   обещал стать. */
-const RUN_DEADLINE_MS = Number(process.env.STUDIO_DEADLINE_MS || 210000);
+/* Общий бюджет. За ним агент дописывает ответ на собранном, а не продолжает
+   искать: незавершённый разбор бесполезен, каким бы полным он ни обещал стать. */
+const REPORT_DEADLINE_MS = Number(process.env.STUDIO_DEADLINE_MS || 210000);
+const CHAT_DEADLINE_MS = Number(process.env.STUDIO_CHAT_DEADLINE_MS || 75000);
 
-/** Ход разбора виден в консоли сервера: без этого «долго» не отличить от «висит». */
+/** Ход работы виден в консоли сервера: без этого «долго» не отличить от «висит». */
 function log(message: string): void {
   if (process.env.NODE_ENV !== "production") console.log(`[studio] ${message}`);
 }
 
 export type AgentEvent =
-  | { type: "model"; model: string }
+  | { type: "model"; model: LuraModel }
+  | { type: "mode"; mode: RunMode }
   | { type: "tool"; phase: "start" | "done"; trace: ToolTrace }
   | { type: "text"; text: string }
   | { type: "done"; thread: StudioThread; message: StudioMessage }
@@ -47,7 +61,7 @@ export type AgentEvent =
 type RunInput = {
   threadId?: string;
   prompt: string;
-  /* Модель на этот разбор. Пусто — берётся цепочка из окружения. */
+  /** Публичное имя модели: lura-pro или lura-fast. */
   model?: string;
   attachments?: Attachment[];
   signal?: AbortSignal;
@@ -79,15 +93,28 @@ function userParts(prompt: string, attachments: Attachment[]): Part[] {
 
 export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   const attachments = input.attachments ?? [];
-  const thread = (input.threadId ? await readThread(input.threadId) : null) ?? emptyThread(threadTitleFrom(input.prompt));
+  const parsed = parsePrompt(input.prompt);
+  const mode = parsed.mode;
+
+  /* Команда без задачи — не ошибка запроса, а разбор без предмета. Модель
+     сама попросит уточнить: отказывать на уровне сервера значило бы отвечать
+     за неё текстом, который нигде не настроить. */
+  const modelText = parsed.text || (mode === "report" ? "Предмет разбора не указан." : parsed.raw);
+
+  const thread = (input.threadId ? await readThread(input.threadId) : null) ?? emptyThread(titleFrom(input.prompt));
+
+  const tier = asLuraModel(input.model);
+  yield { type: "mode", mode };
+  yield { type: "model", model: tier };
 
   const [documents, business] = await Promise.all([listDocuments(), businessDocument()]);
   const businessContext = business ? { document: business, text: await readDocumentText(business.id) } : null;
 
   /* Фрагменты под текущий вопрос подставляются заранее: без этого первый ход
      модели уходит на search_documents с тем же самым запросом. */
-  const excerpts = documents.length ? await searchDocuments(input.prompt) : [];
+  const excerpts = documents.length ? await searchDocuments(modelText) : [];
   const systemInstruction = buildSystemInstruction({
+    mode,
     business: businessContext,
     documents,
     excerpts,
@@ -95,34 +122,43 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 
   const contents: Content[] = [
     ...historyContents(thread),
-    { role: "user", parts: userParts(input.prompt, attachments) },
+    { role: "user", parts: userParts(modelText, attachments) },
   ];
 
   const userMessage: StudioMessage = {
     id: newId(),
     role: "user",
-    text: input.prompt,
+    text: parsed.raw,
     createdAt: new Date().toISOString(),
     attachments: attachments.map((attachment) => ({ name: attachment.name, mime: attachment.mimeType })),
   };
 
+  const chain = modelChain(tier);
+  const maxRounds = mode === "report" ? MAX_TOOL_ROUNDS : MAX_CHAT_TOOL_ROUNDS;
   const traces: ToolTrace[] = [];
   let answer = "";
-  let model = input.model ?? "";
+  let pinned = "";
 
   const startedAt = Date.now();
-  const deadline = startedAt + RUN_DEADLINE_MS;
+  const deadline = startedAt + (mode === "report" ? REPORT_DEADLINE_MS : CHAT_DEADLINE_MS);
 
   try {
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
+    for (let round = 0; round <= maxRounds; round += 1) {
       /* Инструменты снимаются на последнем круге или по дедлайну: без этого
          модель может ходить по ссылкам, пока не оборвётся соединение, и
          пользователь не увидит ни строчки ответа. */
-      const lastRound = round === MAX_TOOL_ROUNDS || Date.now() > deadline;
+      const lastRound = round === maxRounds || Date.now() > deadline;
       if (lastRound && round > 0) {
         contents.push({
           role: "user",
-          parts: [{ text: "Время на сбор данных вышло. Дай финальный ответ по контракту на том, что уже собрано, и честно отметь, чего не хватило." }],
+          parts: [
+            {
+              text:
+                mode === "report"
+                  ? "Время на сбор данных вышло. Дай финальный ответ по контракту на том, что уже собрано, и честно отметь, чего не хватило."
+                  : "Время на сбор данных вышло. Ответь на том, что уже собрано, и честно скажи, чего проверить не успел.",
+            },
+          ],
         });
       }
       log(`ход ${round + 1}${lastRound ? " (финальный, без инструментов)" : ""}, ${Math.round((Date.now() - startedAt) / 1000)}с`);
@@ -133,12 +169,15 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
         contents,
         tools: lastRound ? undefined : TOOL_DECLARATIONS,
         signal: input.signal,
-        model: model || undefined,
+        chain,
+        pinned: pinned || undefined,
       })) {
         if (event.type === "model") {
-          if (!model) {
-            model = event.model;
-            yield { type: "model", model };
+          /* Какая модель провайдера ответила — только в лог. Наружу уходит
+             имя, которое выбрал пользователь. */
+          if (!pinned) {
+            pinned = event.model;
+            log(`отвечает ${tier} (${event.model})`);
           }
         } else if (event.type === "text") {
           answer += event.text;
@@ -153,9 +192,9 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
         break;
       }
 
-      /* Ответ модели возвращается в историю ровно тем, чем пришёл: в Gemini 3
-         у частей есть подпись рассуждения, и без неё следующий ход с
-         результатами инструментов не принимается. */
+      /* Ответ модели возвращается в историю ровно тем, чем пришёл: у частей
+         есть подпись рассуждения, и без неё следующий ход с результатами
+         инструментов не принимается. */
       contents.push({ role: "model", parts: pending.parts });
 
       const responses: Part[] = [];
@@ -192,27 +231,28 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
     role: "agent",
     text: answer.trim(),
     createdAt: new Date().toISOString(),
-    model,
+    model: tier,
+    mode,
     tools: traces,
     artifactId,
   };
 
   thread.messages.push(userMessage, agentMessage);
   thread.updatedAt = new Date().toISOString();
-  if (thread.messages.length <= 2) thread.title = threadTitleFrom(input.prompt);
+  if (thread.messages.length <= 2) thread.title = titleFrom(input.prompt);
 
-  await saveArtifact(artifactId, buildArtifact(input, agentMessage));
+  await saveArtifact(artifactId, buildArtifact(parsed.text || parsed.raw, agentMessage));
   await saveThread(thread);
 
   yield { type: "done", thread, message: agentMessage };
 }
 
-/** Отчёт, который можно скачать файлом: тот же текст плюс шапка и источники. */
-function buildArtifact(input: RunInput, message: StudioMessage): string {
+/** Ответ, который можно скачать файлом: тот же текст плюс шапка и источники. */
+function buildArtifact(prompt: string, message: StudioMessage): string {
   const header = [
-    `# Отчёт — Lura`,
+    message.mode === "report" ? `# Отчёт — Lura` : `# Ответ — Lura`,
     "",
-    `**Запрос:** ${input.prompt}`,
+    `**Запрос:** ${prompt}`,
     `**Дата:** ${new Date(message.createdAt).toLocaleString("ru-RU")}`,
     `**Модель:** ${message.model || "—"}`,
     "",

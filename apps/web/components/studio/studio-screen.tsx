@@ -6,12 +6,12 @@ import { StudioChat, type ComposerAttachment } from "@/components/studio/studio-
 import { StudioContext } from "@/components/studio/studio-context";
 import { StudioRail } from "@/components/studio/studio-rail";
 import { StudioReport } from "@/components/studio/studio-report";
-import type { StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types";
+import type { LuraModel, StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types";
 
 /**
- * Рабочее пространство: рельса, отчёт и диалог.
+ * Рабочее пространство: рельса, окно вывода и диалог.
  *
- * Состояние живёт здесь: все три панели — представления одного разбора, а
+ * Состояние живёт здесь: все три панели — представления одного разговора, а
  * поток событий от агента один. Разводить его по компонентам значило бы
  * синхронизировать их между собой на каждом токене.
  */
@@ -19,11 +19,19 @@ import type { StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types
 const EMPTY: WorkspaceState = {
   documents: [],
   threads: [],
-  runtime: { ready: true, models: [], search: null, storage: "" },
+  runtime: { ready: true, models: ["lura-pro", "lura-fast"], search: null, storage: "" },
 };
 
-type Live = { text: string; tools: ToolTrace[]; model: string };
+type Live = { text: string; tools: ToolTrace[] };
 type View = "report" | "context";
+
+/* Границы панелей. Уже нижней рельса перестаёт вмещать названия разборов,
+   шире верхней — центр становится колонкой текста в пол-экрана. */
+const RAIL = { min: 190, max: 460, initial: 248 };
+const CHAT = { min: 300, max: 720, initial: 400 };
+const WIDTHS_KEY = "lura.studio.widths";
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export function StudioScreen() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(EMPTY);
@@ -33,9 +41,11 @@ export function StudioScreen() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>("report");
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState<LuraModel>("lura-pro");
   const [railOpen, setRailOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
+  const [railWidth, setRailWidth] = useState(RAIL.initial);
+  const [chatWidth, setChatWidth] = useState(CHAT.initial);
   const abort = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -57,7 +67,7 @@ export function StudioScreen() {
     setThread(body.thread);
     setView("report");
     setError(null);
-    /* Открывая разбор, показываем его последний отчёт: он и есть результат. */
+    /* Открывая разбор, показываем его последний ответ: он и есть результат. */
     const last = [...body.thread.messages].reverse().find((message) => message.role === "agent");
     setSelectedReport(last?.id ?? null);
   }, []);
@@ -72,9 +82,28 @@ export function StudioScreen() {
     if (wanted) void openThread(wanted);
   }, [refresh, openThread]);
 
+  /* Ширины панелей — настройка рабочего места, а не состояние документа:
+     живут в браузере и переживают перезагрузку. Чтение только после
+     монтирования, иначе разметка на сервере и в браузере разойдётся. */
   useEffect(() => {
-    if (!model && workspace.runtime.models.length) setModel(workspace.runtime.models[0]);
-  }, [model, workspace.runtime.models]);
+    try {
+      const saved = JSON.parse(localStorage.getItem(WIDTHS_KEY) ?? "null") as
+        | { rail?: number; chat?: number }
+        | null;
+      if (saved?.rail) setRailWidth(clamp(saved.rail, RAIL.min, RAIL.max));
+      if (saved?.chat) setChatWidth(clamp(saved.chat, CHAT.min, CHAT.max));
+    } catch {
+      /* Хранилище может быть недоступно — тогда просто ширины по умолчанию. */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(WIDTHS_KEY, JSON.stringify({ rail: railWidth, chat: chatWidth }));
+    } catch {
+      /* Не сохранилось — не повод ломать экран. */
+    }
+  }, [railWidth, chatWidth]);
 
   const messages = thread?.messages ?? [];
   const reports = messages.filter((message) => message.role === "agent");
@@ -102,6 +131,46 @@ export function StudioScreen() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  /**
+   * Перетаскивание границы.
+   *
+   * Слушатели вешаются на окно, а не на саму границу: курсор при быстром
+   * движении уходит с шестипиксельной полоски раньше, чем приходит событие, и
+   * перетаскивание обрывалось на середине.
+   */
+  function startResize(event: React.PointerEvent, side: "rail" | "chat") {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = side === "rail" ? railWidth : chatWidth;
+
+    const move = (moved: PointerEvent) => {
+      const delta = moved.clientX - startX;
+      if (side === "rail") setRailWidth(clamp(startWidth + delta, RAIL.min, RAIL.max));
+      else setChatWidth(clamp(startWidth - delta, CHAT.min, CHAT.max));
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      document.body.classList.remove("st-resizing");
+    };
+
+    document.body.classList.add("st-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  }
+
+  /** Границу можно двигать и с клавиатуры: мышь есть не у всех. */
+  function resizeByKey(event: React.KeyboardEvent, side: "rail" | "chat") {
+    const step = event.shiftKey ? 40 : 12;
+    const direction = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+    if (!direction) return;
+    event.preventDefault();
+    if (side === "rail") setRailWidth((width) => clamp(width + direction * step, RAIL.min, RAIL.max));
+    else setChatWidth((width) => clamp(width - direction * step, CHAT.min, CHAT.max));
+  }
 
   async function upload(files: File[], asBusiness: boolean) {
     setError(null);
@@ -137,7 +206,7 @@ export function StudioScreen() {
     setBusy(true);
     setError(null);
     setView("report");
-    setLive({ text: "", tools: [], model: "" });
+    setLive({ text: "", tools: [] });
 
     /* Свой запрос показывается сразу: иначе между нажатием и первым событием
        экран выглядит так, будто ничего не приняли. */
@@ -169,7 +238,7 @@ export function StudioScreen() {
       const response = await fetch("/api/studio/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId: thread?.id || undefined, prompt, model: model || undefined, attachments }),
+        body: JSON.stringify({ threadId: thread?.id || undefined, prompt, model, attachments }),
         signal: controller.signal,
       });
 
@@ -195,15 +264,14 @@ export function StudioScreen() {
           if (!frame.startsWith("data:")) continue;
 
           const event = JSON.parse(frame.slice(5).trim()) as
-            | { type: "model"; model: string }
+            | { type: "model"; model: LuraModel }
+            | { type: "mode"; mode: "chat" | "report" }
             | { type: "text"; text: string }
             | { type: "tool"; phase: "start" | "done"; trace: ToolTrace }
             | { type: "done"; thread: StudioThread }
             | { type: "error"; message: string };
 
-          if (event.type === "model") {
-            setLive((current) => (current ? { ...current, model: event.model } : current));
-          } else if (event.type === "text") {
+          if (event.type === "text") {
             setLive((current) => (current ? { ...current, text: current.text + event.text } : current));
           } else if (event.type === "tool") {
             setLive((current) => {
@@ -233,7 +301,7 @@ export function StudioScreen() {
       }
     } catch (caught) {
       if ((caught as Error).name !== "AbortError") {
-        setError(caught instanceof Error ? caught.message : "Разбор прервался.");
+        setError(caught instanceof Error ? caught.message : "Ответ прервался.");
       }
       setLive(null);
     } finally {
@@ -242,15 +310,33 @@ export function StudioScreen() {
     }
   }
 
-  const lastPrompt = [...messages].reverse().find((message) => message.role === "user");
-
   return (
-    <div className={`st ${railOpen ? "" : "no-rail"} ${chatOpen ? "" : "no-chat"}`}>
+    <div
+      className={`st ${railOpen ? "" : "no-rail"} ${chatOpen ? "" : "no-chat"}`}
+      style={
+        {
+          "--st-rail-w": railOpen ? `${railWidth}px` : "0px",
+          "--st-chat-w": chatOpen ? `${chatWidth}px` : "0px",
+          "--st-grip-l": railOpen ? "6px" : "0px",
+          "--st-grip-r": chatOpen ? "6px" : "0px",
+        } as React.CSSProperties
+      }
+    >
       <StudioRail
         threads={workspace.threads}
         activeThread={thread?.id ?? null}
         view={view}
         busy={busy}
+        ready={workspace.runtime.ready}
+        model={model}
+        search={workspace.runtime.search}
+        documents={workspace.documents.length}
+        hasBusinessDoc={Boolean(business)}
+        railOpen={railOpen}
+        chatOpen={chatOpen}
+        answer={shown ? { text: shown.text, artifactId: shown.artifactId } : null}
+        onToggleRail={() => setRailOpen((open) => !open)}
+        onToggleChat={() => setChatOpen((open) => !open)}
         onNewThread={() => {
           setThread(null);
           setSelectedReport(null);
@@ -284,6 +370,16 @@ export function StudioScreen() {
         }}
       />
 
+      <div
+        className="st-grip is-rail"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Ширина панели управления"
+        tabIndex={railOpen ? 0 : -1}
+        onPointerDown={(event) => startResize(event, "rail")}
+        onKeyDown={(event) => resizeByKey(event, "rail")}
+      />
+
       <main className="st-main">
         {view === "context" ? (
           <StudioContext
@@ -309,60 +405,64 @@ export function StudioScreen() {
         )}
       </main>
 
+      <div
+        className="st-grip is-chat"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Ширина диалога"
+        tabIndex={chatOpen ? 0 : -1}
+        onPointerDown={(event) => startResize(event, "chat")}
+        onKeyDown={(event) => resizeByKey(event, "chat")}
+      />
+
       <StudioChat
         messages={messages}
         live={live}
         error={error}
         busy={busy}
         selectedReport={shown?.id ?? null}
-        runtime={workspace.runtime}
+        models={workspace.runtime.models}
         onSelectReport={(id) => {
           setSelectedReport(id);
           setView("report");
         }}
         model={model}
         onModel={setModel}
-        onRerun={() => {
-          if (lastPrompt) void run(lastPrompt.text, []);
-        }}
         onSend={(prompt, attachments) => void run(prompt, attachments)}
         onStop={() => abort.current?.abort()}
       />
 
-      {/* Статусная строка вместо подписей по всему экрану: состояние видно
-          всегда, а место занимает одну полоску. */}
-      <footer className="st-status">
-        <span className={busy ? "is-live" : undefined}>{busy ? "● разбор идёт" : "● готов"}</span>
-        <span>
-          модель <b>{live?.model || workspace.runtime.models[0] || "—"}</b>
-        </span>
-        <span>
-          поиск <b>{workspace.runtime.search ?? "авто"}</b>
-        </span>
-        <span>
-          контекст <b>{workspace.documents.length}</b>
-        </span>
-        {!business ? <span className="is-warn">нет документа о бизнесе</span> : null}
-        {!workspace.runtime.ready ? <span className="is-warn">нет ключа Gemini</span> : null}
-
-        <span className="st-status-spacer" />
-        <button onClick={() => setRailOpen((open) => !open)} title="Ctrl+B">
-          {railOpen ? "скрыть панель" : "показать панель"}
+      {/* Свёрнутую панель нужно чем-то вернуть: кнопка, которая её прячет,
+          уезжает вместе с ней. */}
+      {!railOpen ? (
+        <button className="st-reveal is-left" onClick={() => setRailOpen(true)} title="Ctrl+B">
+          <ChevronIcon />
+          <span className="st-reveal-label">Панель</span>
         </button>
-        <button onClick={() => setChatOpen((open) => !open)} title="Ctrl+J">
-          {chatOpen ? "скрыть диалог" : "показать диалог"}
+      ) : null}
+      {!chatOpen ? (
+        <button className="st-reveal is-right" onClick={() => setChatOpen(true)} title="Ctrl+J">
+          <span className="st-reveal-label">Диалог</span>
+          <ChevronIcon flip />
         </button>
-        {shown ? (
-          <>
-            <button onClick={() => void navigator.clipboard.writeText(shown.text)}>копировать</button>
-            {shown.artifactId ? (
-              <a href={`/api/studio/artifacts/${shown.artifactId}`} download>
-                скачать .md
-              </a>
-            ) : null}
-          </>
-        ) : null}
-      </footer>
+      ) : null}
     </div>
+  );
+}
+
+function ChevronIcon({ flip }: { flip?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={flip ? { transform: "rotate(180deg)" } : undefined}
+      aria-hidden="true"
+    >
+      <path d="M6 3.5 10.5 8 6 12.5" />
+    </svg>
   );
 }

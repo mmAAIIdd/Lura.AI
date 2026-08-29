@@ -2,16 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { StudioMessage, ToolTrace } from "@/lib/studio/types";
+import { REPORT_COMMAND } from "@/lib/studio/command";
+import type { LuraModel, StudioMessage, ToolTrace } from "@/lib/studio/types";
 
 /**
  * Правая полоса — диалог с агентом.
  *
  * Здесь только разговор и работа инструментов: что спросили, куда агент
- * сходил, что нашёл. Сам отчёт живёт в центре и не уезжает вверх при
- * следующем вопросе. Такое разделение — общий приём у редакторов с ассистентом
- * и у чатов с артефактами: длинный результат в стороне, переписка узкой
- * колонкой рядом.
+ * сходил, что нашёл, что ответил. Служебного тут нет ничего: состояние,
+ * настройки и действия над ответом живут в левой панели, полный ответ — в
+ * центре. Такое разделение — общий приём у редакторов с ассистентом: длинный
+ * результат в стороне, переписка узкой колонкой рядом.
  */
 
 export type ComposerAttachment = { name: string; mimeType: string; data: string; text?: string };
@@ -42,14 +43,13 @@ function readAsBase64(file: File): Promise<string> {
 
 type Props = {
   messages: StudioMessage[];
-  model: string;
-  onModel: (model: string) => void;
-  onRerun: () => void;
-  live: { text: string; tools: ToolTrace[]; model: string } | null;
+  model: LuraModel;
+  onModel: (model: LuraModel) => void;
+  live: { text: string; tools: ToolTrace[] } | null;
   error: string | null;
   busy: boolean;
   selectedReport: string | null;
-  runtime: { ready: boolean; models: string[]; search: string | null; storage?: string };
+  models: LuraModel[];
   onSelectReport: (messageId: string) => void;
   onSend: (prompt: string, attachments: ComposerAttachment[]) => void;
   onStop: () => void;
@@ -59,12 +59,11 @@ export function StudioChat({
   messages,
   model,
   onModel,
-  onRerun,
   live,
   error,
   busy,
   selectedReport,
-  runtime,
+  models,
   onSelectReport,
   onSend,
   onStop,
@@ -132,25 +131,29 @@ export function StudioChat({
     if (area.current) area.current.style.height = "auto";
   }
 
-  const lastPrompt = [...messages].reverse().find((message) => message.role === "user");
+  /* Команда разбора набирается кнопкой, а не с клавиатуры: запомнить
+     «/lur manager-dev start» нельзя, а промахнуться в нём — легко, и тогда
+     запрос молча уходит обычным вопросом. Повторное нажатие снимает её. */
+  const commandOn = value.trimStart().toLowerCase().startsWith(REPORT_COMMAND);
+
+  function toggleCommand() {
+    setValue((current) => {
+      const trimmed = current.trimStart();
+      if (trimmed.toLowerCase().startsWith(REPORT_COMMAND)) {
+        return trimmed.slice(REPORT_COMMAND.length).trimStart();
+      }
+      return `${REPORT_COMMAND} ${trimmed}`;
+    });
+    area.current?.focus();
+  }
 
   return (
-    <section className="st-chat" aria-label="Диалог с агентом">
-      <header className="st-chat-head">
-        <h2>Диалог</h2>
-        <div className="st-chat-badges">
-          {lastPrompt ? (
-            <button className="st-rerun" onClick={onRerun} disabled={busy} title="Повторить последний запрос">
-              Перезапустить
-            </button>
-          ) : null}
-          {!runtime.ready ? <span className="is-warn">нет ключа</span> : null}
-        </div>
-      </header>
-
+    <section className="st-chat" aria-label="Диалог с Лурой">
       <div className="st-chat-stream" ref={stream}>
         {!messages.length && !live ? (
-          <p className="st-chat-hint">Запрос и вложения — сюда.</p>
+          <p className="st-chat-hint">
+            Спросите о чём угодно. Полный разбор с отчётом запускает команда «{REPORT_COMMAND}».
+          </p>
         ) : null}
 
         {messages.map((message) =>
@@ -169,14 +172,11 @@ export function StudioChat({
             <article className="st-reply" key={message.id}>
               <ToolList tools={message.tools ?? []} />
               <button
-                className={`st-reply-card ${selectedReport === message.id ? "is-active" : ""}`}
+                className={`st-reply-text ${selectedReport === message.id ? "is-active" : ""}`}
                 onClick={() => onSelectReport(message.id)}
+                title="Показать в центре"
               >
-                <strong>Отчёт готов</strong>
-                <span>
-                  {message.text.length.toLocaleString("ru-RU")} символов
-                  {message.tools?.length ? ` · ${message.tools.length} действий` : ""}
-                </span>
+                {message.text}
               </button>
             </article>
           ),
@@ -185,6 +185,7 @@ export function StudioChat({
         {live ? (
           <article className="st-reply">
             <ToolList tools={live.tools} running />
+            {live.text ? <div className="st-reply-text is-live">{live.text}</div> : null}
           </article>
         ) : null}
 
@@ -196,28 +197,12 @@ export function StudioChat({
       <div className="st-composer">
         {problem ? <p className="st-composer-problem">{problem}</p> : null}
 
-        {attachments.length ? (
-          <div className="st-chips">
-            {attachments.map((attachment, index) => (
-              <span key={`${attachment.name}-${index}`} className="st-chip">
-                {attachment.name}
-                <button
-                  onClick={() => setAttachments((current) => current.filter((_, position) => position !== index))}
-                  aria-label={`Убрать ${attachment.name}`}
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="st-composer-box">
+        <div className={`st-composer-box ${commandOn ? "is-command" : ""}`}>
           <textarea
             ref={area}
             value={value}
-            rows={2}
-            placeholder="Что разобрать? Например: почему выросли жалобы на онбординг после релиза 2.4"
+            rows={1}
+            placeholder="Спросите Луру"
             onChange={(event) => {
               setValue(event.target.value);
               const element = event.target;
@@ -241,25 +226,60 @@ export function StudioChat({
           />
 
           <div className="st-composer-row">
-            <button className="st-attach" onClick={() => fileInput.current?.click()} disabled={busy}>
-              Приложить
+            <button
+              className="st-icon"
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+              title="Приложить файл или картинку"
+              aria-label="Приложить файл"
+            >
+              <PlusIcon />
             </button>
+
+            <button
+              className={`st-icon ${commandOn ? "is-on" : ""}`}
+              onClick={toggleCommand}
+              disabled={busy}
+              title={`Разбор по пайплайну: ${REPORT_COMMAND}`}
+              aria-label="Режим разбора"
+              aria-pressed={commandOn}
+            >
+              <SlashIcon />
+            </button>
+
+            <span className="st-composer-sep" aria-hidden="true" />
+
+            <div className="st-chips">
+              {attachments.map((attachment, index) => (
+                <span key={`${attachment.name}-${index}`} className="st-chip">
+                  <FileIcon />
+                  <span className="st-chip-name">{attachment.name}</span>
+                  <button
+                    onClick={() => setAttachments((current) => current.filter((_, position) => position !== index))}
+                    aria-label={`Убрать ${attachment.name}`}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            <span className="st-composer-gap" />
 
             <select
               className="st-model"
               value={model}
-              onChange={(event) => onModel(event.target.value)}
+              onChange={(event) => onModel(event.target.value as LuraModel)}
               disabled={busy}
               aria-label="Модель"
             >
-              {runtime.models.map((name) => (
+              {models.map((name) => (
                 <option key={name} value={name}>
-                  {name.replace("gemini-", "")}
+                  {name}
                 </option>
               ))}
             </select>
 
-            <span className="st-composer-gap" />
             <input
               ref={fileInput}
               type="file"
@@ -273,12 +293,18 @@ export function StudioChat({
             />
 
             {busy ? (
-              <button className="st-send is-stop" onClick={onStop}>
-                Остановить
+              <button className="st-send is-stop" onClick={onStop} title="Остановить" aria-label="Остановить">
+                <StopIcon />
               </button>
             ) : (
-              <button className="st-send" onClick={send} disabled={!value.trim()}>
-                Разобрать
+              <button
+                className="st-send"
+                onClick={send}
+                disabled={!value.trim()}
+                title="Отправить"
+                aria-label="Отправить"
+              >
+                <ArrowUpIcon />
               </button>
             )}
           </div>
@@ -290,7 +316,7 @@ export function StudioChat({
 
 function ToolList({ tools, running }: { tools: ToolTrace[]; running?: boolean }) {
   if (!tools.length) {
-    return running ? <p className="st-tool-idle">Агент планирует разбор…</p> : null;
+    return running ? <p className="st-tool-idle">Lura думает…</p> : null;
   }
 
   return (
@@ -305,5 +331,47 @@ function ToolList({ tools, running }: { tools: ToolTrace[]; running?: boolean })
         </div>
       ))}
     </div>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <path d="M8 3.5v9M3.5 8h9" />
+    </svg>
+  );
+}
+
+function SlashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="11" height="11" rx="3" />
+      <path d="M9.5 5.5 6.5 10.5" />
+    </svg>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 2H4.5v12h7V4.5z" />
+      <path d="M9 2v2.5h2.5" />
+    </svg>
+  );
+}
+
+function ArrowUpIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 12.5v-9M4 7.5 8 3.5l4 4" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <rect x="5" y="5" width="6" height="6" rx="1.2" />
+    </svg>
   );
 }
