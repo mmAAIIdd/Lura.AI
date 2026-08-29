@@ -1,6 +1,6 @@
 import { createFileStore } from "@/lib/studio/store/files";
 import { createPostgresStore, databaseUrl } from "@/lib/studio/store/postgres";
-import type { StudioDocument, StudioMode, StudioStore, StudioThread } from "@/lib/studio/store/contract";
+import type { StudioDocument, StudioStore, StudioThread } from "@/lib/studio/store/contract";
 import { newId } from "@/lib/studio/store/ids";
 
 /**
@@ -59,9 +59,9 @@ export const readThread = (id: string) => studioStore().readThread(id);
 export const saveThread = (thread: StudioThread) => studioStore().saveThread(thread);
 export const deleteThread = (id: string) => studioStore().deleteThread(id);
 
-export function emptyThread(title: string, mode: StudioMode): StudioThread {
+export function emptyThread(title: string): StudioThread {
   const now = new Date().toISOString();
-  return { id: newId(), mode, title, createdAt: now, updatedAt: now, messages: [] };
+  return { id: newId(), title, createdAt: now, updatedAt: now, messages: [] };
 }
 
 /* ---------- Готовые отчёты ---------- */
@@ -76,7 +76,6 @@ export type {
   DocumentKind,
   StudioDocument,
   StudioMessage,
-  StudioMode,
   StudioThread,
   ThreadSummary,
   ToolTrace,

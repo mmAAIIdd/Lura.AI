@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { StudioComposer, type ComposerAttachment } from "@/components/studio/studio-composer";
-import { StudioOutput } from "@/components/studio/studio-output";
-import { StudioSidebar } from "@/components/studio/studio-sidebar";
-import type { StudioMode, StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types";
+import { StudioChat, type ComposerAttachment } from "@/components/studio/studio-chat";
+import { StudioContext } from "@/components/studio/studio-context";
+import { StudioRail } from "@/components/studio/studio-rail";
+import { StudioReport } from "@/components/studio/studio-report";
+import type { StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types";
 
 /**
- * Рабочее пространство целиком.
+ * Рабочее пространство: рельса, отчёт и диалог.
  *
- * Состояние живёт здесь: боковая панель, окно вывода и командная строка —
- * представления, а поток событий от агента один, и разводить его по трём
- * компонентам значило бы синхронизировать их между собой на каждом токене.
+ * Состояние живёт здесь: все три панели — представления одного разбора, а
+ * поток событий от агента один. Разводить его по компонентам значило бы
+ * синхронизировать их между собой на каждом токене.
  */
 
 const EMPTY: WorkspaceState = {
@@ -22,14 +23,16 @@ const EMPTY: WorkspaceState = {
 };
 
 type Live = { text: string; tools: ToolTrace[]; model: string };
+type View = "report" | "context";
 
 export function StudioScreen() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(EMPTY);
-  const [mode, setMode] = useState<StudioMode>("reports");
   const [thread, setThread] = useState<StudioThread | null>(null);
   const [live, setLive] = useState<Live | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<View>("report");
+  const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -49,28 +52,28 @@ export function StudioScreen() {
     if (!response.ok) return;
     const body = (await response.json()) as { thread: StudioThread };
     setThread(body.thread);
-    setMode(body.thread.mode);
+    setView("report");
     setError(null);
+    /* Открывая разбор, показываем его последний отчёт: он и есть результат. */
+    const last = [...body.thread.messages].reverse().find((message) => message.role === "agent");
+    setSelectedReport(last?.id ?? null);
   }, []);
 
   useEffect(() => {
     void refresh();
-    const saved = window.localStorage.getItem("lura-studio-mode");
-    if (saved === "updates" || saved === "reports") setMode(saved);
-
-    /* Ссылка на разбор открывает именно его: готовый отчёт нужно уметь
-       переслать коллеге, а не пересказывать. */
-    const wanted = new URLSearchParams(window.location.search).get("thread");
+    /* Ссылка открывает то, что в ней указано: конкретный разбор или экран
+       контекста. Готовый отчёт нужно уметь переслать, а не пересказывать. */
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") === "context") setView("context");
+    const wanted = params.get("thread");
     if (wanted) void openThread(wanted);
   }, [refresh, openThread]);
 
-  function switchMode(next: StudioMode) {
-    setMode(next);
-    window.localStorage.setItem("lura-studio-mode", next);
-    /* Разбор принадлежит режиму: показывать отчёт по релизу в «Отчётах» —
-       значит стереть разницу между двумя окнами. */
-    if (thread && thread.mode !== next) setThread(null);
-  }
+  const messages = thread?.messages ?? [];
+  const reports = messages.filter((message) => message.role === "agent");
+  const shown =
+    reports.find((message) => message.id === selectedReport) ?? reports[reports.length - 1] ?? null;
+  const business = workspace.documents.find((document) => document.kind === "business");
 
   async function upload(files: File[], asBusiness: boolean) {
     setError(null);
@@ -105,26 +108,25 @@ export function StudioScreen() {
   async function run(prompt: string, attachments: ComposerAttachment[]) {
     setBusy(true);
     setError(null);
+    setView("report");
     setLive({ text: "", tools: [], model: "" });
 
-    /* Свой запрос показывается сразу, не дожидаясь сервера: иначе между
-       нажатием и первым событием экран выглядит так, будто ничего не приняли. */
-    const optimistic: StudioThread = thread ?? {
+    /* Свой запрос показывается сразу: иначе между нажатием и первым событием
+       экран выглядит так, будто ничего не приняли. */
+    const base: StudioThread = thread ?? {
       id: "",
-      mode,
       title: prompt,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       messages: [],
     };
     setThread({
-      ...optimistic,
+      ...base,
       messages: [
-        ...optimistic.messages,
+        ...base.messages,
         {
           id: `local-${Date.now()}`,
           role: "user",
-          mode,
           text: prompt,
           createdAt: new Date().toISOString(),
           attachments: attachments.map((attachment) => ({ name: attachment.name, mime: attachment.mimeType })),
@@ -139,7 +141,7 @@ export function StudioScreen() {
       const response = await fetch("/api/studio/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId: thread?.id || undefined, prompt, mode, attachments }),
+        body: JSON.stringify({ threadId: thread?.id || undefined, prompt, attachments }),
         signal: controller.signal,
       });
 
@@ -191,6 +193,8 @@ export function StudioScreen() {
             });
           } else if (event.type === "done") {
             setThread(event.thread);
+            const last = [...event.thread.messages].reverse().find((message) => message.role === "agent");
+            setSelectedReport(last?.id ?? null);
             setLive(null);
             void refresh();
           } else if (event.type === "error") {
@@ -212,53 +216,95 @@ export function StudioScreen() {
 
   return (
     <div className="st">
-      <StudioSidebar
-        mode={mode}
-        onMode={switchMode}
-        documents={workspace.documents}
+      <StudioRail
         threads={workspace.threads}
         activeThread={thread?.id ?? null}
+        view={view}
         busy={busy}
-        onUpload={upload}
-        onUploadUrl={uploadUrl}
-        onMakeBusiness={async (id) => {
-          await fetch(`/api/studio/documents/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: "business" }),
-          });
-          await refresh();
-        }}
-        onDeleteDocument={async (id) => {
-          await fetch(`/api/studio/documents/${id}`, { method: "DELETE" });
-          await refresh();
+        onNewThread={() => {
+          setThread(null);
+          setSelectedReport(null);
+          setError(null);
+          setView("report");
         }}
         onOpenThread={(id) => {
           void openThread(id);
           window.history.replaceState(null, "", `/studio?thread=${id}`);
         }}
-        onNewThread={() => {
-          setThread(null);
-          setError(null);
+        onOpenContext={() => {
+          setView("context");
+          window.history.replaceState(null, "", "/studio?view=context");
         }}
       />
 
       <main className="st-main">
-        <StudioOutput
-          mode={mode}
-          thread={thread}
-          live={live}
-          error={error}
-          runtime={workspace.runtime}
-          onStarter={(prompt) => void run(prompt, [])}
-        />
-        <StudioComposer
-          mode={mode}
-          busy={busy}
-          onSend={(prompt, attachments) => void run(prompt, attachments)}
-          onStop={() => abort.current?.abort()}
-        />
+        {view === "context" ? (
+          <StudioContext
+            documents={workspace.documents}
+            busy={busy}
+            onUpload={upload}
+            onUploadUrl={uploadUrl}
+            onMakeBusiness={async (id) => {
+              await fetch(`/api/studio/documents/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ kind: "business" }),
+              });
+              await refresh();
+            }}
+            onDelete={async (id) => {
+              await fetch(`/api/studio/documents/${id}`, { method: "DELETE" });
+              await refresh();
+            }}
+          />
+        ) : (
+          <StudioReport message={shown} streaming={live} />
+        )}
       </main>
+
+      <StudioChat
+        messages={messages}
+        live={live}
+        error={error}
+        busy={busy}
+        selectedReport={shown?.id ?? null}
+        runtime={workspace.runtime}
+        onSelectReport={(id) => {
+          setSelectedReport(id);
+          setView("report");
+        }}
+        onSend={(prompt, attachments) => void run(prompt, attachments)}
+        onStop={() => abort.current?.abort()}
+      />
+
+      {/* Статусная строка вместо подписей по всему экрану: состояние видно
+          всегда, а место занимает одну полоску. */}
+      <footer className="st-status">
+        <span className={busy ? "is-live" : undefined}>{busy ? "● разбор идёт" : "● готов"}</span>
+        <span>
+          модель <b>{live?.model || workspace.runtime.models[0] || "—"}</b>
+        </span>
+        <span>
+          поиск <b>{workspace.runtime.search ?? "авто"}</b>
+        </span>
+        <span>
+          контекст <b>{workspace.documents.length}</b>
+        </span>
+        {!business ? <span className="is-warn">нет документа о бизнесе</span> : null}
+        {!workspace.runtime.ready ? <span className="is-warn">нет ключа Gemini</span> : null}
+
+        <span className="st-status-spacer" />
+        {shown ? (
+          <>
+            <button onClick={() => void navigator.clipboard.writeText(shown.text)}>копировать</button>
+            {shown.artifactId ? (
+              <a href={`/api/studio/artifacts/${shown.artifactId}`} download>
+                скачать .md
+              </a>
+            ) : null}
+          </>
+        ) : null}
+      </footer>
     </div>
   );
 }

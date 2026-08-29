@@ -209,7 +209,6 @@ export function createFileStore(): StudioStore {
         .filter((thread): thread is StudioThread => Boolean(thread))
         .map((thread) => ({
           id: thread.id,
-          mode: thread.mode ?? "reports",
           title: thread.title,
           updatedAt: thread.updatedAt,
           messages: thread.messages.length,

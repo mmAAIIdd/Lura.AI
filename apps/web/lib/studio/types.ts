@@ -7,7 +7,6 @@
  */
 
 export type DocumentKind = "business" | "source";
-export type StudioMode = "reports" | "updates";
 
 export type StudioDocument = {
   id: string;
@@ -31,7 +30,6 @@ export type ToolTrace = {
 export type StudioMessage = {
   id: string;
   role: "user" | "agent";
-  mode: StudioMode;
   text: string;
   createdAt: string;
   model?: string;
@@ -42,14 +40,13 @@ export type StudioMessage = {
 
 export type StudioThread = {
   id: string;
-  mode: StudioMode;
   title: string;
   createdAt: string;
   updatedAt: string;
   messages: StudioMessage[];
 };
 
-export type ThreadSummary = { id: string; mode: StudioMode; title: string; updatedAt: string; messages: number };
+export type ThreadSummary = { id: string; title: string; updatedAt: string; messages: number };
 
 export type WorkspaceState = {
   documents: StudioDocument[];

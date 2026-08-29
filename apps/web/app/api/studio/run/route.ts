@@ -1,5 +1,4 @@
 import { runAgent, type Attachment } from "@/lib/studio/agent";
-import type { StudioMode } from "@/lib/studio/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +13,7 @@ export const maxDuration = 300;
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { threadId?: string; prompt?: string; mode?: StudioMode; attachments?: Attachment[] }
+    | { threadId?: string; prompt?: string; attachments?: Attachment[] }
     | null;
 
   const prompt = body?.prompt?.trim();
@@ -22,7 +21,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Пустой запрос." }, { status: 400 });
   }
 
-  const mode: StudioMode = body?.mode === "updates" ? "updates" : "reports";
   const attachments = (body?.attachments ?? []).slice(0, 6);
 
   const encoder = new TextEncoder();
@@ -33,7 +31,7 @@ export async function POST(request: Request) {
       };
 
       try {
-        for await (const event of runAgent({ threadId: body?.threadId, prompt, mode, attachments, signal: request.signal })) {
+        for await (const event of runAgent({ threadId: body?.threadId, prompt, attachments, signal: request.signal })) {
           send(event);
         }
       } catch (error) {

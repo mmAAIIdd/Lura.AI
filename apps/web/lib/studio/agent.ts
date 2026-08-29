@@ -12,7 +12,6 @@ import {
   saveArtifact,
   saveThread,
   type StudioMessage,
-  type StudioMode,
   type StudioThread,
   type ToolTrace,
 } from "@/lib/studio/store";
@@ -48,7 +47,6 @@ export type AgentEvent =
 type RunInput = {
   threadId?: string;
   prompt: string;
-  mode: StudioMode;
   attachments?: Attachment[];
   signal?: AbortSignal;
 };
@@ -79,7 +77,7 @@ function userParts(prompt: string, attachments: Attachment[]): Part[] {
 
 export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   const attachments = input.attachments ?? [];
-  const thread = (input.threadId ? await readThread(input.threadId) : null) ?? emptyThread(threadTitleFrom(input.prompt), input.mode);
+  const thread = (input.threadId ? await readThread(input.threadId) : null) ?? emptyThread(threadTitleFrom(input.prompt));
 
   const [documents, business] = await Promise.all([listDocuments(), businessDocument()]);
   const businessContext = business ? { document: business, text: await readDocumentText(business.id) } : null;
@@ -88,7 +86,6 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
      модели уходит на search_documents с тем же самым запросом. */
   const excerpts = documents.length ? await searchDocuments(input.prompt) : [];
   const systemInstruction = buildSystemInstruction({
-    mode: input.mode,
     business: businessContext,
     documents,
     excerpts,
@@ -102,7 +99,6 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   const userMessage: StudioMessage = {
     id: newId(),
     role: "user",
-    mode: input.mode,
     text: input.prompt,
     createdAt: new Date().toISOString(),
     attachments: attachments.map((attachment) => ({ name: attachment.name, mime: attachment.mimeType })),
@@ -192,7 +188,6 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   const agentMessage: StudioMessage = {
     id: newId(),
     role: "agent",
-    mode: input.mode,
     text: answer.trim(),
     createdAt: new Date().toISOString(),
     model,
@@ -213,7 +208,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 /** Отчёт, который можно скачать файлом: тот же текст плюс шапка и источники. */
 function buildArtifact(input: RunInput, message: StudioMessage): string {
   const header = [
-    `# ${input.mode === "updates" ? "Отчёт по обновлениям" : "Отчёт"} — Lura`,
+    `# Отчёт — Lura`,
     "",
     `**Запрос:** ${input.prompt}`,
     `**Дата:** ${new Date(message.createdAt).toLocaleString("ru-RU")}`,

@@ -9,7 +9,7 @@ import {
   type ThreadSummary,
 } from "@/lib/studio/store/contract";
 import { newId } from "@/lib/studio/store/ids";
-import type { DocumentKind, StudioMessage, StudioMode } from "@/lib/studio/types";
+import type { DocumentKind, StudioMessage } from "@/lib/studio/types";
 
 /**
  * Хранилище в Postgres — то, на чём рабочее пространство живёт на Vercel.
@@ -153,7 +153,6 @@ function toDocument(row: Row): StudioDocument {
 function toThread(row: Row): StudioThread {
   return {
     id: String(row.id),
-    mode: (row.mode === "updates" ? "updates" : "reports") as StudioMode,
     title: String(row.title),
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
@@ -298,13 +297,12 @@ export function createPostgresStore(): StudioStore {
     async listThreads(): Promise<ThreadSummary[]> {
       const conn = await db();
       const rows = await conn`
-        select id, mode, title, updated_at, jsonb_array_length(messages) as messages
+        select id, title, updated_at, jsonb_array_length(messages) as messages
         from studio.threads
         order by updated_at desc
       `;
       return rows.map((row) => ({
         id: String(row.id),
-        mode: (row.mode === "updates" ? "updates" : "reports") as StudioMode,
         title: String(row.title),
         updatedAt: new Date(row.updated_at as string).toISOString(),
         messages: Number(row.messages ?? 0),
@@ -314,7 +312,7 @@ export function createPostgresStore(): StudioStore {
     async readThread(id) {
       const conn = await db();
       const rows = await conn`
-        select id, mode, title, created_at, updated_at, messages from studio.threads where id = ${id}
+        select id, title, created_at, updated_at, messages from studio.threads where id = ${id}
       `;
       return rows.length ? toThread(rows[0]) : null;
     },
@@ -322,10 +320,9 @@ export function createPostgresStore(): StudioStore {
     async saveThread(thread) {
       const conn = await db();
       await conn`
-        insert into studio.threads (id, mode, title, created_at, updated_at, messages)
-        values (${thread.id}, ${thread.mode}, ${thread.title}, ${thread.createdAt}, ${thread.updatedAt}, ${conn.json(thread.messages)})
+        insert into studio.threads (id, title, created_at, updated_at, messages)
+        values (${thread.id}, ${thread.title}, ${thread.createdAt}, ${thread.updatedAt}, ${conn.json(thread.messages)})
         on conflict (id) do update set
-          mode = excluded.mode,
           title = excluded.title,
           updated_at = excluded.updated_at,
           messages = excluded.messages

@@ -1,10 +1,4 @@
-import type {
-  DocumentKind,
-  StudioDocument,
-  StudioMode,
-  StudioThread,
-  ThreadSummary,
-} from "@/lib/studio/types";
+import type { DocumentKind, StudioDocument, StudioThread, ThreadSummary } from "@/lib/studio/types";
 
 /**
  * Контракт хранилища рабочего пространства.
@@ -70,4 +64,4 @@ export interface StudioStore {
  */
 export class StorageUnavailableError extends Error {}
 
-export type { DocumentKind, StudioDocument, StudioMode, StudioThread, ThreadSummary };
+export type { DocumentKind, StudioDocument, StudioThread, ThreadSummary };
