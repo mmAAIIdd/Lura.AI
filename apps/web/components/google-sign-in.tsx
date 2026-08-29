@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AuthShell } from "@/components/auth-shell";
-import { getSafeNextPath } from "@/lib/api";
+import { getSafeNextPath } from "@/lib/navigation";
 import { describeAuthError } from "@/lib/auth/errors";
 import { createClient } from "@/lib/supabase/client";
 import { readSupabaseConfig } from "@/lib/supabase/config";

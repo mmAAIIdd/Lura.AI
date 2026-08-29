@@ -26,6 +26,8 @@ const ACCEPT = ".txt,.md,.markdown,.csv,.tsv,.json,.log,.yaml,.yml,.xml,.html,.h
 
 export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBusiness, onDelete }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<{ title: string; text: string; truncated: boolean } | null>(null);
+  const [loading, setLoading] = useState<string | null>(null);
   const [asBusiness, setAsBusiness] = useState(false);
   const [link, setLink] = useState("");
   const [dropping, setDropping] = useState(false);
@@ -41,6 +43,31 @@ export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBu
     } finally {
       setWorking(false);
     }
+  }
+
+  async function open(id: string, title: string) {
+    setLoading(id);
+    try {
+      const response = await fetch(`/api/studio/documents/${id}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = (await response.json()) as { text: string; truncated: boolean };
+      setPreview({ title, text: body.text, truncated: body.truncated });
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  if (preview) {
+    return (
+      <div className="st-context">
+        <header className="st-preview-head">
+          <button onClick={() => setPreview(null)}>← Назад</button>
+          <strong>{preview.title}</strong>
+        </header>
+        <pre className="st-preview">{preview.text}</pre>
+        {preview.truncated ? <p className="st-context-empty">Показаны первые 20 000 символов.</p> : null}
+      </div>
+    );
   }
 
   return (
@@ -117,7 +144,7 @@ export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBu
       <section className="st-context-block">
         <h2>Документ о бизнесе</h2>
         {business ? (
-          <DocumentRow document={business} primary onDelete={onDelete} />
+          <DocumentRow document={business} primary onDelete={onDelete} onOpen={open} loading={loading === business.id} />
         ) : (
           <p className="st-context-empty">Не загружен — агент работает без контекста компании.</p>
         )}
@@ -135,6 +162,8 @@ export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBu
                 document={document}
                 onMakeBusiness={onMakeBusiness}
                 onDelete={onDelete}
+                onOpen={open}
+                loading={loading === document.id}
               />
             ))}
           </div>
@@ -151,11 +180,15 @@ function DocumentRow({
   primary,
   onMakeBusiness,
   onDelete,
+  onOpen,
+  loading,
 }: {
   document: StudioDocument;
   primary?: boolean;
   onMakeBusiness?: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpen: (id: string, title: string) => void;
+  loading: boolean;
 }) {
   const origin =
     document.origin.type === "url"
@@ -178,6 +211,9 @@ function DocumentRow({
       </div>
 
       <div className="st-doc-actions">
+        <button onClick={() => onOpen(document.id, document.title)} disabled={loading}>
+          {loading ? "Открываю…" : "Открыть"}
+        </button>
         {!primary && onMakeBusiness ? (
           <button onClick={() => onMakeBusiness(document.id)}>Сделать основным</button>
         ) : null}

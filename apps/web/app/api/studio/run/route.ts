@@ -13,7 +13,7 @@ export const maxDuration = 300;
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { threadId?: string; prompt?: string; attachments?: Attachment[] }
+    | { threadId?: string; prompt?: string; model?: string; attachments?: Attachment[] }
     | null;
 
   const prompt = body?.prompt?.trim();
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       };
 
       try {
-        for await (const event of runAgent({ threadId: body?.threadId, prompt, attachments, signal: request.signal })) {
+        for await (const event of runAgent({ threadId: body?.threadId, prompt, model: body?.model, attachments, signal: request.signal })) {
           send(event);
         }
       } catch (error) {

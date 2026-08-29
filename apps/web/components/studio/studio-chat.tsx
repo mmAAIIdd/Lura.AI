@@ -42,6 +42,9 @@ function readAsBase64(file: File): Promise<string> {
 
 type Props = {
   messages: StudioMessage[];
+  model: string;
+  onModel: (model: string) => void;
+  onRerun: () => void;
   live: { text: string; tools: ToolTrace[]; model: string } | null;
   error: string | null;
   busy: boolean;
@@ -54,6 +57,9 @@ type Props = {
 
 export function StudioChat({
   messages,
+  model,
+  onModel,
+  onRerun,
   live,
   error,
   busy,
@@ -126,16 +132,19 @@ export function StudioChat({
     if (area.current) area.current.style.height = "auto";
   }
 
-  const activeModel = live?.model || [...messages].reverse().find((message) => message.model)?.model;
+  const lastPrompt = [...messages].reverse().find((message) => message.role === "user");
 
   return (
     <section className="st-chat" aria-label="Диалог с агентом">
       <header className="st-chat-head">
         <h2>Диалог</h2>
         <div className="st-chat-badges">
-          <span title="Модель, которая отвечает">{activeModel || runtime.models[0] || "—"}</span>
-          {runtime.search ? <span title="Провайдер поиска">поиск: {runtime.search}</span> : null}
-          {!runtime.ready ? <span className="is-warn">нет ключа Gemini</span> : null}
+          {lastPrompt ? (
+            <button className="st-rerun" onClick={onRerun} disabled={busy} title="Повторить последний запрос">
+              Перезапустить
+            </button>
+          ) : null}
+          {!runtime.ready ? <span className="is-warn">нет ключа</span> : null}
         </div>
       </header>
 
@@ -235,6 +244,22 @@ export function StudioChat({
             <button className="st-attach" onClick={() => fileInput.current?.click()} disabled={busy}>
               Приложить
             </button>
+
+            <select
+              className="st-model"
+              value={model}
+              onChange={(event) => onModel(event.target.value)}
+              disabled={busy}
+              aria-label="Модель"
+            >
+              {runtime.models.map((name) => (
+                <option key={name} value={name}>
+                  {name.replace("gemini-", "")}
+                </option>
+              ))}
+            </select>
+
+            <span className="st-composer-gap" />
             <input
               ref={fileInput}
               type="file"

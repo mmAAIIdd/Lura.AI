@@ -47,6 +47,8 @@ export type AgentEvent =
 type RunInput = {
   threadId?: string;
   prompt: string;
+  /* Модель на этот разбор. Пусто — берётся цепочка из окружения. */
+  model?: string;
   attachments?: Attachment[];
   signal?: AbortSignal;
 };
@@ -106,7 +108,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
 
   const traces: ToolTrace[] = [];
   let answer = "";
-  let model = "";
+  let model = input.model ?? "";
 
   const startedAt = Date.now();
   const deadline = startedAt + RUN_DEADLINE_MS;

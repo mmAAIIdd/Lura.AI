@@ -33,6 +33,9 @@ export function StudioScreen() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>("report");
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [model, setModel] = useState("");
+  const [railOpen, setRailOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(true);
   const abort = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
@@ -69,11 +72,36 @@ export function StudioScreen() {
     if (wanted) void openThread(wanted);
   }, [refresh, openThread]);
 
+  useEffect(() => {
+    if (!model && workspace.runtime.models.length) setModel(workspace.runtime.models[0]);
+  }, [model, workspace.runtime.models]);
+
   const messages = thread?.messages ?? [];
   const reports = messages.filter((message) => message.role === "agent");
   const shown =
     reports.find((message) => message.id === selectedReport) ?? reports[reports.length - 1] ?? null;
   const business = workspace.documents.find((document) => document.kind === "business");
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "n") {
+        event.preventDefault();
+        setThread(null);
+        setSelectedReport(null);
+        setView("report");
+      } else if (key === "b") {
+        event.preventDefault();
+        setRailOpen((open) => !open);
+      } else if (key === "j") {
+        event.preventDefault();
+        setChatOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function upload(files: File[], asBusiness: boolean) {
     setError(null);
@@ -141,7 +169,7 @@ export function StudioScreen() {
       const response = await fetch("/api/studio/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId: thread?.id || undefined, prompt, attachments }),
+        body: JSON.stringify({ threadId: thread?.id || undefined, prompt, model: model || undefined, attachments }),
         signal: controller.signal,
       });
 
@@ -214,8 +242,10 @@ export function StudioScreen() {
     }
   }
 
+  const lastPrompt = [...messages].reverse().find((message) => message.role === "user");
+
   return (
-    <div className="st">
+    <div className={`st ${railOpen ? "" : "no-rail"} ${chatOpen ? "" : "no-chat"}`}>
       <StudioRail
         threads={workspace.threads}
         activeThread={thread?.id ?? null}
@@ -234,6 +264,23 @@ export function StudioScreen() {
         onOpenContext={() => {
           setView("context");
           window.history.replaceState(null, "", "/studio?view=context");
+        }}
+        onRenameThread={async (id, title) => {
+          await fetch(`/api/studio/threads/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title }),
+          });
+          if (thread?.id === id) setThread({ ...thread, title });
+          await refresh();
+        }}
+        onDeleteThread={async (id) => {
+          await fetch(`/api/studio/threads/${id}`, { method: "DELETE" });
+          if (thread?.id === id) {
+            setThread(null);
+            setSelectedReport(null);
+          }
+          await refresh();
         }}
       />
 
@@ -273,6 +320,11 @@ export function StudioScreen() {
           setSelectedReport(id);
           setView("report");
         }}
+        model={model}
+        onModel={setModel}
+        onRerun={() => {
+          if (lastPrompt) void run(lastPrompt.text, []);
+        }}
         onSend={(prompt, attachments) => void run(prompt, attachments)}
         onStop={() => abort.current?.abort()}
       />
@@ -294,6 +346,12 @@ export function StudioScreen() {
         {!workspace.runtime.ready ? <span className="is-warn">нет ключа Gemini</span> : null}
 
         <span className="st-status-spacer" />
+        <button onClick={() => setRailOpen((open) => !open)} title="Ctrl+B">
+          {railOpen ? "скрыть панель" : "показать панель"}
+        </button>
+        <button onClick={() => setChatOpen((open) => !open)} title="Ctrl+J">
+          {chatOpen ? "скрыть диалог" : "показать диалог"}
+        </button>
         {shown ? (
           <>
             <button onClick={() => void navigator.clipboard.writeText(shown.text)}>копировать</button>

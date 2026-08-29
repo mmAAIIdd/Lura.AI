@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getLoginPath } from "@/lib/api";
+import { getLoginPath } from "@/lib/navigation";
 import { studioIsOpen } from "@/lib/studio/access";
 import { isSupabaseConfigured, readSupabaseConfig } from "@/lib/supabase/config";
 

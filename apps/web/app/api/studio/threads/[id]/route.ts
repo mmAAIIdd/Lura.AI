@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { deleteThread, listThreads, readThread } from "@/lib/studio/store";
+import { deleteThread, listThreads, readThread, saveThread } from "@/lib/studio/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +11,21 @@ export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
   const thread = await readThread(id);
   if (!thread) return NextResponse.json({ error: "Разбор не найден." }, { status: 404 });
+  return NextResponse.json({ thread });
+}
+
+/** Переименование: разбор ищут по названию, и первый вопрос им не всегда годится. */
+export async function PATCH(request: Request, { params }: Params) {
+  const { id } = await params;
+  const body = (await request.json().catch(() => null)) as { title?: string } | null;
+  const title = body?.title?.trim();
+  if (!title) return NextResponse.json({ error: "Пустое название." }, { status: 400 });
+
+  const thread = await readThread(id);
+  if (!thread) return NextResponse.json({ error: "Разбор не найден." }, { status: 404 });
+
+  thread.title = title.slice(0, 120);
+  await saveThread(thread);
   return NextResponse.json({ thread });
 }
 

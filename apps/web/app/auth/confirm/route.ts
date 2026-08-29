@@ -1,8 +1,7 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getSafeNextPath } from "@/lib/api";
-import { linkBackendSession } from "@/lib/auth/backend-session";
+import { getSafeNextPath } from "@/lib/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -49,27 +48,7 @@ export async function GET(request: NextRequest) {
   destination.search = next.includes("?") ? `?${next.split("?").slice(1).join("?")}` : "";
   const response = NextResponse.redirect(destination);
 
-  // A recovery link must not also open a backend session: the visitor still has
-  // to choose a new password before that counts as a real sign-in.
-  if (type !== "recovery" && next !== "/reset-password") {
-    await attachBackendSession(response);
-  }
   return response;
-}
-
-/** Best-effort: a backend that is unavailable must not break email confirmation. */
-async function attachBackendSession(response: NextResponse): Promise<void> {
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase.auth.getSession();
-    const accessToken = data.session?.access_token;
-    if (!accessToken) return;
-    for (const cookie of await linkBackendSession(accessToken)) {
-      response.headers.append("set-cookie", cookie);
-    }
-  } catch {
-    // The workspace retries this on its first unauthorized backend call.
-  }
 }
 
 function errorRedirect(request: NextRequest, reason: "provider" | "exchange" | "missing", detail?: string) {
