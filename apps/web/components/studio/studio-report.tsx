@@ -2,13 +2,15 @@
 
 import { LuraLogo } from "@/components/lura-logo";
 import { ReportMarkdown } from "@/components/studio/report-markdown";
+import { REPORT_COMMAND } from "@/lib/studio/command";
 import type { StudioMessage, ToolTrace } from "@/lib/studio/types";
 
 /**
  * Центральное окно — поле ответа и ничего больше.
  *
- * Ни заголовков, ни подсказок, ни кнопок поверх текста: всё служебное живёт
- * в рельсе и в статусной строке. Пока разбора нет — пустое поле со знаком.
+ * Ни заголовков, ни кнопок поверх текста: всё служебное живёт в панели
+ * справа. Пока ответа нет, здесь стоит начальный экран: один знак посреди
+ * белого поля читается как незагрузившаяся страница, а не как «спросите».
  */
 
 type Props = {
@@ -31,7 +33,14 @@ export function StudioReport({ message, streaming }: Props) {
     return (
       <div className="st-report">
         <div className="st-idle">
-          <LuraLogo className="st-idle-mark" />
+          <div className="st-idle-inner">
+            <LuraLogo className="st-idle-mark" />
+            <h1>Ответ появится здесь</h1>
+            <p>
+              Спросите Луру в панели рядом. Полный разбор продукта с отчётом запускает
+              команда <code>{REPORT_COMMAND}</code>.
+            </p>
+          </div>
         </div>
       </div>
     );
