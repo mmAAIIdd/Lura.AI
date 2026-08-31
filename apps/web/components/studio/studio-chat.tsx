@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { ModelPicker } from "@/components/studio/model-picker";
+import { PanelIcon } from "@/components/studio/panel-icon";
 import { REPORT_COMMAND } from "@/lib/studio/command";
 import type { LuraModel, StudioMessage, ToolTrace } from "@/lib/studio/types";
 
@@ -28,6 +30,32 @@ const TOOL_LABEL: Record<string, string> = {
   search_documents: "Документы",
 };
 
+/**
+ * Ответ для строки диалога.
+ *
+ * В диалоге идёт разговор, а не документ: решётки заголовков, звёздочки
+ * жирного и палки таблиц читаются здесь как мусор. Размеченный ответ целиком
+ * лежит в центре — сюда попадает то же самое человеческим текстом.
+ */
+function plainPreview(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^\s{0,3}\|.*$/gm, "")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s{0,3}[-*_]{3,}\s*$/gm, "")
+    .replace(/^\s{0,3}[-*+]\s+/gm, "• ")
+    .replace(/^\s{0,3}\d+\.\s+/gm, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*([\s\S]*?)\*\*/g, "$1")
+    .replace(/__([\s\S]*?)__/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
 function attachmentSize(attachment: ComposerAttachment): number {
   return attachment.text ? attachment.text.length : Math.floor(attachment.data.length * 0.75);
 }
@@ -50,6 +78,7 @@ type Props = {
   busy: boolean;
   selectedReport: string | null;
   models: LuraModel[];
+  onCollapse: () => void;
   onSelectReport: (messageId: string) => void;
   onSend: (prompt: string, attachments: ComposerAttachment[]) => void;
   onStop: () => void;
@@ -64,6 +93,7 @@ export function StudioChat({
   busy,
   selectedReport,
   models,
+  onCollapse,
   onSelectReport,
   onSend,
   onStop,
@@ -149,6 +179,12 @@ export function StudioChat({
 
   return (
     <section className="st-chat" aria-label="Диалог с Лурой">
+      {/* Свернуть чат можно только с самого чата: кнопка в чужой панели
+          заставляет искать управление не там, где стоит то, чем управляют. */}
+      <button className="st-collapse st-chat-collapse" onClick={onCollapse} title="Скрыть чат — Ctrl J" aria-label="Скрыть чат">
+        <PanelIcon side="right" />
+      </button>
+
       <div className="st-chat-stream" ref={stream}>
         {!messages.length && !live ? (
           <p className="st-chat-hint">
@@ -176,7 +212,7 @@ export function StudioChat({
                 onClick={() => onSelectReport(message.id)}
                 title="Показать в центре"
               >
-                {message.text}
+                {plainPreview(message.text)}
               </button>
             </article>
           ),
@@ -185,7 +221,7 @@ export function StudioChat({
         {live ? (
           <article className="st-reply">
             <ToolList tools={live.tools} running />
-            {live.text ? <div className="st-reply-text is-live">{live.text}</div> : null}
+            {live.text ? <div className="st-reply-text is-live">{plainPreview(live.text)}</div> : null}
           </article>
         ) : null}
 
@@ -233,7 +269,7 @@ export function StudioChat({
               title="Приложить файл или картинку"
               aria-label="Приложить файл"
             >
-              <PlusIcon />
+              <ClipIcon />
             </button>
 
             <button
@@ -244,7 +280,7 @@ export function StudioChat({
               aria-label="Режим разбора"
               aria-pressed={commandOn}
             >
-              <SlashIcon />
+              <CommandIcon />
             </button>
 
             <span className="st-composer-sep" aria-hidden="true" />
@@ -266,19 +302,7 @@ export function StudioChat({
 
             <span className="st-composer-gap" />
 
-            <select
-              className="st-model"
-              value={model}
-              onChange={(event) => onModel(event.target.value as LuraModel)}
-              disabled={busy}
-              aria-label="Модель"
-            >
-              {models.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
+            <ModelPicker value={model} options={models} disabled={busy} onChange={onModel} />
 
             <input
               ref={fileInput}
@@ -334,19 +358,21 @@ function ToolList({ tools, running }: { tools: ToolTrace[]; running?: boolean })
   );
 }
 
-function PlusIcon() {
+function ClipIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-      <path d="M8 3.5v9M3.5 8h9" />
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12.6 7.4 8 12a2.9 2.9 0 0 1-4.1-4.1l5-5a1.9 1.9 0 0 1 2.7 2.7l-5 5a.9.9 0 0 1-1.3-1.3l4.6-4.6" />
     </svg>
   );
 }
 
-function SlashIcon() {
+/* Знак режима разбора: командная скобка — то же, чем помечают команду в
+   терминале, и ровно то, чем она является в поле ввода. */
+function CommandIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-      <rect x="2.5" y="2.5" width="11" height="11" rx="3" />
-      <path d="M9.5 5.5 6.5 10.5" />
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 4.6 7 8l-3 3.4" />
+      <path d="M8.4 11.6h3.8" />
     </svg>
   );
 }
@@ -362,8 +388,8 @@ function FileIcon() {
 
 function ArrowUpIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M8 12.5v-9M4 7.5 8 3.5l4 4" />
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 12.6V3.7M4.3 7.4 8 3.7l3.7 3.7" />
     </svg>
   );
 }
@@ -371,7 +397,7 @@ function ArrowUpIcon() {
 function StopIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <rect x="5" y="5" width="6" height="6" rx="1.2" />
+      <rect x="5.2" y="5.2" width="5.6" height="5.6" rx="1.6" />
     </svg>
   );
 }

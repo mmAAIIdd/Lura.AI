@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { PanelIcon } from "@/components/studio/panel-icon";
 import { StudioChat, type ComposerAttachment } from "@/components/studio/studio-chat";
 import { StudioContext } from "@/components/studio/studio-context";
 import { StudioRail } from "@/components/studio/studio-rail";
@@ -47,6 +48,7 @@ export function StudioScreen() {
   const [railWidth, setRailWidth] = useState(RAIL.initial);
   const [chatWidth, setChatWidth] = useState(CHAT.initial);
   const abort = useRef<AbortController | null>(null);
+  const shell = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/studio/workspace", { cache: "no-store" });
@@ -109,8 +111,6 @@ export function StudioScreen() {
   const reports = messages.filter((message) => message.role === "agent");
   const shown =
     reports.find((message) => message.id === selectedReport) ?? reports[reports.length - 1] ?? null;
-  const business = workspace.documents.find((document) => document.kind === "business");
-
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!(event.ctrlKey || event.metaKey)) return;
@@ -135,28 +135,44 @@ export function StudioScreen() {
   /**
    * Перетаскивание границы.
    *
+   * Пока границу тянут, ширина пишется прямо в стиль корневого элемента, а не
+   * в состояние: через состояние на каждый пиксель перерисовывался весь отчёт
+   * с таблицами, и граница заметно отставала от курсора. В состояние уходит
+   * только итог — его и нужно сохранить.
+   *
    * Слушатели вешаются на окно, а не на саму границу: курсор при быстром
    * движении уходит с шестипиксельной полоски раньше, чем приходит событие, и
    * перетаскивание обрывалось на середине.
    */
   function startResize(event: React.PointerEvent, side: "rail" | "chat") {
     event.preventDefault();
+    const node = shell.current;
+    const grip = event.currentTarget as HTMLElement;
+    if (!node) return;
+
     const startX = event.clientX;
-    const startWidth = side === "rail" ? railWidth : chatWidth;
+    const limit = side === "rail" ? RAIL : CHAT;
+    const variable = side === "rail" ? "--st-rail-w" : "--st-chat-w";
+    let width = side === "rail" ? railWidth : chatWidth;
 
     const move = (moved: PointerEvent) => {
       const delta = moved.clientX - startX;
-      if (side === "rail") setRailWidth(clamp(startWidth + delta, RAIL.min, RAIL.max));
-      else setChatWidth(clamp(startWidth - delta, CHAT.min, CHAT.max));
+      const base = side === "rail" ? railWidth + delta : chatWidth - delta;
+      width = clamp(Math.round(base), limit.min, limit.max);
+      node.style.setProperty(variable, `${width}px`);
     };
     const finish = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
       document.body.classList.remove("st-resizing");
+      grip.classList.remove("is-dragging");
+      if (side === "rail") setRailWidth(width);
+      else setChatWidth(width);
     };
 
     document.body.classList.add("st-resizing");
+    grip.classList.add("is-dragging");
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", finish);
     window.addEventListener("pointercancel", finish);
@@ -312,6 +328,7 @@ export function StudioScreen() {
 
   return (
     <div
+      ref={shell}
       className={`st ${railOpen ? "" : "no-rail"} ${chatOpen ? "" : "no-chat"}`}
       style={
         {
@@ -328,15 +345,7 @@ export function StudioScreen() {
         view={view}
         busy={busy}
         ready={workspace.runtime.ready}
-        model={model}
-        search={workspace.runtime.search}
-        documents={workspace.documents.length}
-        hasBusinessDoc={Boolean(business)}
-        railOpen={railOpen}
-        chatOpen={chatOpen}
-        answer={shown ? { text: shown.text, artifactId: shown.artifactId } : null}
-        onToggleRail={() => setRailOpen((open) => !open)}
-        onToggleChat={() => setChatOpen((open) => !open)}
+        onCollapse={() => setRailOpen(false)}
         onNewThread={() => {
           setThread(null);
           setSelectedReport(null);
@@ -422,6 +431,7 @@ export function StudioScreen() {
         busy={busy}
         selectedReport={shown?.id ?? null}
         models={workspace.runtime.models}
+        onCollapse={() => setChatOpen(false)}
         onSelectReport={(id) => {
           setSelectedReport(id);
           setView("report");
@@ -435,34 +445,25 @@ export function StudioScreen() {
       {/* Свёрнутую панель нужно чем-то вернуть: кнопка, которая её прячет,
           уезжает вместе с ней. */}
       {!railOpen ? (
-        <button className="st-reveal is-left" onClick={() => setRailOpen(true)} title="Ctrl+B">
-          <ChevronIcon />
-          <span className="st-reveal-label">Панель</span>
+        <button
+          className="st-reveal is-left"
+          onClick={() => setRailOpen(true)}
+          title="Панель — ⌃B"
+          aria-label="Показать панель"
+        >
+          <PanelIcon side="left" on={false} />
         </button>
       ) : null}
       {!chatOpen ? (
-        <button className="st-reveal is-right" onClick={() => setChatOpen(true)} title="Ctrl+J">
-          <span className="st-reveal-label">Диалог</span>
-          <ChevronIcon flip />
+        <button
+          className="st-reveal is-right"
+          onClick={() => setChatOpen(true)}
+          title="Чат — ⌃J"
+          aria-label="Показать чат"
+        >
+          <PanelIcon side="right" on={false} />
         </button>
       ) : null}
     </div>
-  );
-}
-
-function ChevronIcon({ flip }: { flip?: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={flip ? { transform: "rotate(180deg)" } : undefined}
-      aria-hidden="true"
-    >
-      <path d="M6 3.5 10.5 8 6 12.5" />
-    </svg>
   );
 }

@@ -5,17 +5,19 @@
 
 .st {
   --st-bg: #ffffff;
-  --st-panel: #f7f8fa;
-  --st-rail: #f3f4f6;
-  --st-sunken: #eceef1;
-  --st-line: #e2e5ea;
-  --st-line-soft: #eef0f3;
-  --st-ink: #14161a;
-  --st-muted: #5a616c;
-  --st-muted-soft: #868d99;
+  --st-panel: #f8f9fb;
+  --st-rail: #f5f6f8;
+  --st-sunken: #ecedf1;
+  --st-line: #e4e6eb;
+  --st-line-soft: #eff1f4;
+  --st-ink: #15171c;
+  --st-muted: #585f6b;
+  --st-muted-soft: #878e9a;
   --st-accent: #1a5fd6;
   --st-danger: #b42318;
   --st-ok: #197a3d;
+  --st-hover: #edeef2;
+  --st-ring: 0 0 0 3px rgba(26, 95, 214, .16);
 
   --st-rail-w: 248px;
   --st-chat-w: 400px;
@@ -37,6 +39,14 @@
 
 .st button { font: inherit; color: inherit; cursor: pointer; }
 .st button:disabled { cursor: default; opacity: .45; }
+
+/* Видимая обводка появляется только при управлении с клавиатуры: мышью её
+   ловят как лишнюю рамку, а без неё по интерфейсу нельзя ходить табом. */
+.st :focus-visible { outline: none; box-shadow: var(--st-ring); }
+
+@media (prefers-reduced-motion: reduce) {
+  .st *, .st *::before, .st *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
 .st ::selection { background: rgba(26, 95, 214, .18); }
 
 .st ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -60,13 +70,14 @@
   align-items: center;
   gap: 9px;
   margin: 0 0 10px;
-  padding-left: 8px;
+  padding: 0 4px 0 8px;
   font-size: 16px;
   font-weight: 640;
   letter-spacing: -.02em;
 }
 
 .st-brand-logo { width: 24px; height: 24px; flex: 0 0 auto; color: var(--st-accent); }
+.st-brand .st-collapse { margin-left: auto; }
 
 .st-nav { display: grid; gap: 1px; }
 
@@ -85,19 +96,19 @@
 }
 
 .st-nav-item svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--st-muted); }
-.st-nav-item:hover:not(:disabled) { background: #eef0f3; }
-.st-nav-item.is-active { background: #e6ebf5; }
+.st-nav-item:hover:not(:disabled) { background: var(--st-hover); }
+.st-nav-item.is-active { background: #e7ecf6; }
 .st-nav-item.is-active svg { color: var(--st-accent); }
 
 .st-rail-scroll { min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 6px 8px 12px; }
 
 .st-rail-label {
-  margin: 8px 0 4px;
+  margin: 10px 0 5px;
   padding-left: 10px;
   color: var(--st-muted-soft);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: .09em;
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: .11em;
   text-transform: uppercase;
 }
 
@@ -123,8 +134,8 @@
   border-radius: 50%;
 }
 
-.st-thread:hover:not(:disabled) { background: #eef0f3; }
-.st-thread.is-active { background: #e6ebf5; }
+.st-thread:hover:not(:disabled) { background: var(--st-hover); }
+.st-thread.is-active { background: #e7ecf6; }
 .st-thread.is-active .st-thread-dot { border-color: var(--st-accent); background: var(--st-accent); }
 .st-thread-title { min-width: 0; overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -229,6 +240,7 @@
 /* ---------- Диалог ---------- */
 
 .st-chat {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
@@ -236,16 +248,16 @@
   background: var(--st-panel);
 }
 
-.st-chat-stream { min-height: 0; overflow-y: auto; padding: 16px 14px; }
+.st-chat-stream { min-height: 0; overflow-y: auto; padding: 42px 14px 16px; }
 .st-chat-hint { margin: 0; color: var(--st-muted-soft); font-size: 13.5px; }
 
 /* Запрос — в рамке, ответ под ним обычным текстом: так это устроено в
    редакторах с ассистентом, и так видно, где чей текст. */
 .st-said {
   margin: 0 0 14px;
-  padding: 10px 12px;
+  padding: 10px 13px;
   border: 1px solid var(--st-line);
-  border-radius: 9px;
+  border-radius: 11px;
   background: var(--st-bg);
 }
 .st-said p { margin: 0; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; }
@@ -282,7 +294,7 @@
   line-clamp: 8;
   transition: border-color .12s ease, background-color .12s ease;
 }
-.st-reply-text:hover { background: #eef0f3; }
+.st-reply-text:hover { background: var(--st-hover); }
 .st-reply-text.is-active { border-left-color: var(--st-accent); }
 .st-reply-text.is-live { color: var(--st-muted); cursor: default; -webkit-line-clamp: 4; line-clamp: 4; }
 
@@ -387,25 +399,39 @@
 
 /* ---------- Подвал рельсы: состояние и действия ---------- */
 
-.st-rail-foot { padding: 10px 14px 12px; border-top: 1px solid var(--st-line); }
+.st-rail-foot { padding: 10px 14px 12px; border-top: 1px solid var(--st-line-soft); }
 
-.st-rail-answer { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
-.st-rail-answer button,
-.st-rail-answer a { border: 0; padding: 0; background: transparent; color: var(--st-accent); font: inherit; font-size: 13px; text-decoration: none; }
-.st-rail-answer button:hover,
-.st-rail-answer a:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* Кнопка «свернуть» — при своей же панели: у рельсы в шапке, у чата в углу
+   над перепиской. Знак без подписи: рядом с ним нет ничего похожего, а места
+   он занимает ровно столько, чтобы не спорить с содержимым. */
+.st-collapse {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--st-muted-soft);
+  transition: background-color .12s ease, color .12s ease;
+}
+.st-collapse svg { width: 16px; height: 16px; }
+.st-collapse:hover { background: var(--st-hover); color: var(--st-ink); }
 
-.st-rail-toggles { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
-.st-rail-toggles button { border: 0; padding: 0; background: transparent; color: var(--st-muted); font-size: 13px; }
-.st-rail-toggles button:hover { color: var(--st-ink); text-decoration: underline; text-underline-offset: 3px; }
+.st-chat-collapse {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  /* Кнопка висит над лентой сообщений, поэтому у неё непрозрачный фон
+     чата — иначе текст проступает сквозь неё при прокрутке. */
+  background: var(--st-panel);
+  box-shadow: 0 0 8px 6px var(--st-panel);
+}
+.st-chat-collapse:hover { box-shadow: none; }
 
-.st-state { display: grid; gap: 2px; margin: 0; font-size: 12px; }
-.st-state > div { display: flex; justify-content: space-between; gap: 10px; }
-.st-state dt { color: var(--st-muted-soft); }
-.st-state dd { margin: 0; overflow: hidden; color: var(--st-muted); text-overflow: ellipsis; white-space: nowrap; }
-.st-state dd.is-live { color: var(--st-ok); }
-
-.st-rail-warn { margin: 10px 0 0; color: var(--st-danger); font-size: 12px; line-height: 1.4; }
+.st-rail-warn { margin: 0 0 10px; padding: 0 4px; color: var(--st-danger); font-size: 12px; line-height: 1.45; }
 .st-rail-empty { margin: 6px 10px; color: var(--st-muted-soft); font-size: 13.5px; }
 
 /* ---------- Подвижные границы ---------- */
@@ -424,8 +450,9 @@
   position: absolute;
   inset: 0 -3px;
 }
-.st-grip:hover,
-.st-grip:focus-visible { background: var(--st-accent); outline: none; }
+.st-grip:hover { background: #9aa1ad; }
+.st-grip.is-dragging { background: #6f7681; }
+.st-grip:focus-visible { outline: none; }
 
 /* Свёрнутая панель оставляет свою границу в сетке нулевой ширины, а не
    убирает её: display:none у элемента сетки сдвигает все остальные колонки на
@@ -443,20 +470,19 @@ body.st-resizing iframe { pointer-events: none; }
   position: fixed;
   top: 12px;
   z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 8px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
   border: 1px solid var(--st-line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--st-bg);
   color: var(--st-muted);
-  box-shadow: 0 1px 3px rgba(20, 22, 26, .08);
+  box-shadow: 0 2px 8px rgba(20, 22, 26, .07);
+  transition: color .12s ease, border-color .12s ease;
 }
-.st-reveal:hover { border-color: var(--st-accent); color: var(--st-ink); }
-.st-reveal svg { width: 14px; height: 14px; }
-.st-reveal-label { font-size: 12.5px; }
+.st-reveal:hover { border-color: var(--st-muted-soft); color: var(--st-ink); }
+.st-reveal svg { width: 16px; height: 16px; }
 .st-reveal.is-left { left: 12px; }
 .st-reveal.is-right { right: 12px; }
 
@@ -526,21 +552,28 @@ body.st-resizing iframe { pointer-events: none; }
   padding: 0 10px;
   height: 32px;
   border: 1px solid var(--st-line);
-  border-radius: 7px;
+  border-radius: 9px;
   background: var(--st-bg);
+  transition: border-color .12s ease;
 }
+
+.st-search:focus-within { border-color: var(--st-muted-soft); }
 
 .st-search svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--st-muted-soft); }
 .st-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--st-ink); font: inherit; font-size: 13.5px; }
 .st-search input:focus { outline: none; }
 .st-search input::placeholder { color: var(--st-muted-soft); }
-.st-search button { border: 0; padding: 0; background: transparent; color: var(--st-muted-soft); font-size: 12px; }
+.st-search button { display: grid; width: 16px; height: 16px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; border-radius: 5px; background: transparent; color: var(--st-muted-soft); }
+.st-search button svg { width: 12px; height: 12px; }
+.st-search button:hover { color: var(--st-ink); }
 
 .st-nav-item kbd {
   margin-left: auto;
   color: var(--st-muted-soft);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 11px;
+  letter-spacing: .02em;
+  white-space: nowrap;
 }
 
 .st-thread { display: flex; min-width: 0; align-items: center; gap: 4px; padding: 0 4px 0 0; }
@@ -568,7 +601,7 @@ body.st-resizing iframe { pointer-events: none; }
   background: transparent;
   color: var(--st-muted-soft);
 }
-.st-thread-tools button:hover { background: #e2e5ea; color: var(--st-ink); }
+.st-thread-tools button:hover { background: var(--st-sunken); color: var(--st-ink); }
 .st-thread-tools svg { width: 13px; height: 13px; }
 
 .st-thread-edit {
@@ -586,20 +619,69 @@ body.st-resizing iframe { pointer-events: none; }
 
 /* ---------- Модель, перезапуск ---------- */
 
-.st-model {
+.st-picker { position: relative; flex: 0 0 auto; }
+
+.st-picker-trigger {
+  display: inline-flex;
   height: 28px;
-  max-width: 130px;
-  flex: 0 0 auto;
-  padding: 0 6px;
-  border: 1px solid var(--st-line);
-  border-radius: 8px;
-  background: var(--st-bg);
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px 0 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
   color: var(--st-muted);
-  font: inherit;
   font-size: 12.5px;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
 }
-.st-model:hover:not(:disabled) { color: var(--st-ink); }
-.st-model:focus { outline: none; border-color: var(--st-accent); }
+.st-picker-trigger svg { width: 12px; height: 12px; transition: transform .16s ease; }
+.st-picker-trigger:hover:not(:disabled),
+.st-picker-trigger.is-open { border-color: var(--st-line); background: var(--st-bg); color: var(--st-ink); }
+.st-picker-trigger.is-open svg { transform: rotate(180deg); }
+
+.st-picker-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  min-width: 210px;
+  padding: 5px;
+  border: 1px solid var(--st-line);
+  border-radius: 13px;
+  background: var(--st-bg);
+  box-shadow: 0 14px 36px rgba(20, 22, 26, .13), 0 2px 6px rgba(20, 22, 26, .05);
+  outline: none;
+  /* Меню выезжает от кнопки — движение объясняет, откуда оно взялось, и
+     больше ни для чего здесь не нужно. */
+  animation: st-rise .14s ease;
+}
+
+/* Фокус внутри меню показывает подсвеченный пункт, а не обводка вокруг всей
+   карточки: общая обводка вдобавок затирала бы тень, которой карточка
+   отделяется от поля ввода. */
+.st-picker-menu:focus-visible {
+  box-shadow: 0 14px 36px rgba(20, 22, 26, .13), 0 2px 6px rgba(20, 22, 26, .05);
+}
+
+@keyframes st-rise {
+  from { opacity: 0; transform: translateY(5px); }
+}
+
+.st-picker-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 7px 9px 8px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.st-picker-item.is-active { background: var(--st-sunken); }
+.st-picker-mark { display: grid; height: 19px; place-items: center; color: var(--st-accent); }
+.st-picker-mark svg { width: 13px; height: 13px; }
+.st-picker-text { display: grid; min-width: 0; gap: 1px; }
+.st-picker-text b { font-size: 13.5px; font-weight: 560; letter-spacing: -.01em; }
+.st-picker-text small { color: var(--st-muted-soft); font-size: 12px; line-height: 1.35; }
 
 /* ---------- Предпросмотр документа ---------- */
 
