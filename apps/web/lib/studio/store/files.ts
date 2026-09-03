@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { studioDir } from "@/lib/studio/config";
@@ -21,10 +22,15 @@ import { newId } from "@/lib/studio/store/ids";
  * рабочее пространство одной команды незачем.
  */
 
-type Paths = ReturnType<typeof paths>;
+type Paths = {
+  root: string;
+  documents: string;
+  index: string;
+  threads: string;
+  artifacts: string;
+};
 
-function paths() {
-  const root = studioDir();
+function paths(root: string): Paths {
   return {
     root,
     documents: path.join(root, "documents"),
@@ -34,24 +40,83 @@ function paths() {
   };
 }
 
-async function ensure(dirs: Paths): Promise<void> {
+/**
+ * Проверка папки на пригодность.
+ *
+ * Одного mkdir мало: он проходит и там, где потом падает запись, а на
+ * бессерверной площадке каталог приложения вообще не существует и ошибка
+ * приходит как ENOENT, а не как EROFS. Поэтому после создания папок сюда же
+ * пишется и удаляется пробный файл — это единственный надёжный ответ на
+ * вопрос «можно ли здесь хранить состояние».
+ */
+async function usable(root: string): Promise<Paths | null> {
+  const dirs = paths(root);
   try {
     await Promise.all(
       [dirs.root, dirs.documents, dirs.index, dirs.threads, dirs.artifacts].map((dir) =>
         fs.mkdir(dir, { recursive: true }),
       ),
     );
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EROFS" || code === "EACCES" || code === "EPERM") {
-      throw new StorageUnavailableError(
-        `Рабочее пространство не может писать в ${dirs.root}: ${code}. ` +
-          "На бессерверной площадке файловая система доступна только для чтения — " +
-          "задайте STUDIO_DATABASE_URL, чтобы состояние ушло в Postgres.",
-      );
-    }
-    throw error;
+    const probe = path.join(dirs.root, ".writable");
+    await fs.writeFile(probe, "ok", "utf8");
+    await fs.rm(probe, { force: true });
+    return dirs;
+  } catch {
+    return null;
   }
+}
+
+/* Куда в итоге легло состояние и пережило ли оно перезапуск. */
+let ephemeral = false;
+let pending: Promise<Paths> | null = null;
+
+export function filesAreEphemeral(): boolean {
+  return ephemeral;
+}
+
+/**
+ * Корень хранилища, разрешаемый один раз за жизнь процесса.
+ *
+ * Если настроенная папка недоступна для записи, состояние уходит во временную
+ * папку системы. Это не полноценная замена: на бессерверной площадке она своя
+ * у каждого экземпляра и очищается между запусками — зато чат и разборы
+ * работают вместо отказа на первом же запросе. Постоянное хранилище
+ * включается переменной STUDIO_DATABASE_URL.
+ */
+async function resolveRoot(): Promise<Paths> {
+  const wanted = studioDir();
+  const direct = await usable(wanted);
+  if (direct) {
+    ephemeral = false;
+    return direct;
+  }
+
+  const temporary = await usable(path.join(os.tmpdir(), "lura-studio"));
+  if (temporary) {
+    ephemeral = true;
+    console.warn(
+      `[studio] ${wanted} недоступна для записи, состояние уходит во временную папку ${temporary.root}. ` +
+        "Задайте STUDIO_DATABASE_URL, чтобы оно сохранялось.",
+    );
+    return temporary;
+  }
+
+  throw new StorageUnavailableError(
+    "Рабочему пространству негде хранить состояние: ни рабочая папка, ни временная папка системы " +
+      "не доступны для записи. Задайте STUDIO_DATABASE_URL — состояние уйдёт в Postgres.",
+  );
+}
+
+function ready(): Promise<Paths> {
+  if (!pending) {
+    /* Неудачную попытку не кэшируем: причина может быть временной, и
+       навсегда запомненный отказ пережил бы саму проблему. */
+    pending = resolveRoot().catch((error) => {
+      pending = null;
+      throw error;
+    });
+  }
+  return pending;
 }
 
 async function readJson<T>(file: string): Promise<T | null> {
@@ -106,11 +171,12 @@ function keywordScore(query: string, chunk: string): number {
 
 export function createFileStore(): StudioStore {
   return {
-    label: "файлы",
+    get label() {
+      return ephemeral ? "временные файлы" : "файлы";
+    },
 
     async listDocuments() {
-      const dirs = paths();
-      await ensure(dirs);
+      const dirs = await ready();
       const files = await fs.readdir(dirs.documents).catch(() => [] as string[]);
       const documents = await Promise.all(
         files
@@ -124,13 +190,12 @@ export function createFileStore(): StudioStore {
     },
 
     async readDocumentText(id) {
-      const dirs = paths();
+      const dirs = await ready();
       return fs.readFile(path.join(dirs.documents, `${id}.txt`), "utf8").catch(() => "");
     },
 
     async saveDocument(draft: DocumentDraft, text) {
-      const dirs = paths();
-      await ensure(dirs);
+      const dirs = await ready();
       const document: StudioDocument = {
         id: draft.id ?? newId(),
         title: draft.title,
@@ -147,7 +212,7 @@ export function createFileStore(): StudioStore {
     },
 
     async updateDocument(id, patch) {
-      const dirs = paths();
+      const dirs = await ready();
       const file = path.join(dirs.documents, `${id}.json`);
       const current = await readJson<StudioDocument>(file);
       if (!current) return null;
@@ -157,7 +222,7 @@ export function createFileStore(): StudioStore {
     },
 
     async deleteDocument(id) {
-      const dirs = paths();
+      const dirs = await ready();
       await Promise.all([
         fs.rm(path.join(dirs.documents, `${id}.json`), { force: true }),
         fs.rm(path.join(dirs.documents, `${id}.txt`), { force: true }),
@@ -166,8 +231,7 @@ export function createFileStore(): StudioStore {
     },
 
     async saveChunks(documentId, title, chunks, vectors) {
-      const dirs = paths();
-      await ensure(dirs);
+      const dirs = await ready();
       const index: ChunkIndex = {
         documentId,
         title,
@@ -178,8 +242,7 @@ export function createFileStore(): StudioStore {
     },
 
     async searchChunks(query, limit) {
-      const dirs = paths();
-      await ensure(dirs);
+      const dirs = await ready();
       const files = await fs.readdir(dirs.index).catch(() => [] as string[]);
       const indexes = await Promise.all(
         files.filter((name) => name.endsWith(".json")).map((name) => readJson<ChunkIndex>(path.join(dirs.index, name))),
@@ -199,8 +262,7 @@ export function createFileStore(): StudioStore {
     },
 
     async listThreads(): Promise<ThreadSummary[]> {
-      const dirs = paths();
-      await ensure(dirs);
+      const dirs = await ready();
       const files = await fs.readdir(dirs.threads).catch(() => [] as string[]);
       const threads = await Promise.all(
         files.filter((name) => name.endsWith(".json")).map((name) => readJson<StudioThread>(path.join(dirs.threads, name))),
@@ -217,29 +279,27 @@ export function createFileStore(): StudioStore {
     },
 
     async readThread(id) {
-      const dirs = paths();
+      const dirs = await ready();
       return readJson<StudioThread>(path.join(dirs.threads, `${id}.json`));
     },
 
     async saveThread(thread) {
-      const dirs = paths();
-      await ensure(dirs);
+      const dirs = await ready();
       await writeJson(path.join(dirs.threads, `${thread.id}.json`), thread);
     },
 
     async deleteThread(id) {
-      const dirs = paths();
+      const dirs = await ready();
       await fs.rm(path.join(dirs.threads, `${id}.json`), { force: true });
     },
 
     async saveArtifact(id, markdown) {
-      const dirs = paths();
-      await ensure(dirs);
+      const dirs = await ready();
       await fs.writeFile(path.join(dirs.artifacts, `${id}.md`), markdown, "utf8");
     },
 
     async readArtifact(id) {
-      const dirs = paths();
+      const dirs = await ready();
       return fs.readFile(path.join(dirs.artifacts, `${id}.md`), "utf8").catch(() => null);
     },
   };

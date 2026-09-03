@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PanelIcon } from "@/components/studio/icons";
+import { cx } from "@/lib/studio/cx";
 import { StudioContext } from "@/components/studio/studio-context";
 import { StudioPanel, type ComposerAttachment } from "@/components/studio/studio-panel";
 import { StudioReport } from "@/components/studio/studio-report";
@@ -19,7 +20,7 @@ import type { LuraModel, StudioThread, ToolTrace, WorkspaceState } from "@/lib/s
 const EMPTY: WorkspaceState = {
   documents: [],
   threads: [],
-  runtime: { ready: true, models: ["lura-pro", "lura-fast"], search: null, storage: "" },
+  runtime: { ready: true, models: ["lura-pro", "lura-fast"], search: null, storage: "", ephemeral: false },
 };
 
 type Live = { text: string; tools: ToolTrace[] };
@@ -313,7 +314,7 @@ export function StudioScreen() {
   return (
     <div
       ref={shell}
-      className={`st ${panelOpen ? "" : "no-panel"}`}
+      className={cx("st", !panelOpen && "no-panel")}
       style={
         {
           "--st-panel-w": panelOpen ? `${panelWidth}px` : "0px",
@@ -367,6 +368,7 @@ export function StudioScreen() {
         error={error}
         busy={busy}
         ready={workspace.runtime.ready}
+        ephemeral={workspace.runtime.ephemeral}
         selectedReport={shown?.id ?? null}
         onModel={setModel}
         onSelectReport={(id) => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { cx } from "@/lib/studio/cx";
 import type { LuraModel } from "@/lib/studio/types";
 
 /**
@@ -76,7 +77,7 @@ export function ModelPicker({ value, options, disabled, onChange }: Props) {
       <button
         ref={trigger}
         type="button"
-        className={`st-picker-trigger ${open ? "is-open" : ""}`}
+        className={cx("st-picker-trigger", open && "is-open")}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -127,7 +128,7 @@ export function ModelPicker({ value, options, disabled, onChange }: Props) {
               id={`model-${model}`}
               role="option"
               aria-selected={model === value}
-              className={`st-picker-item ${index === active ? "is-active" : ""} ${model === value ? "is-current" : ""}`}
+              className={cx("st-picker-item", index === active && "is-active", model === value && "is-current")}
               onPointerEnter={() => setActive(index)}
               onClick={() => choose(model)}
             >

@@ -1,4 +1,4 @@
-import { createFileStore } from "@/lib/studio/store/files";
+import { createFileStore, filesAreEphemeral } from "@/lib/studio/store/files";
 import { createPostgresStore, databaseUrl } from "@/lib/studio/store/postgres";
 import type { StudioDocument, StudioStore, StudioThread } from "@/lib/studio/store/contract";
 import { newId } from "@/lib/studio/store/ids";
@@ -22,6 +22,17 @@ export function studioStore(): StudioStore {
 
 export function storeLabel(): string {
   return studioStore().label;
+}
+
+/**
+ * Переживёт ли состояние перезапуск.
+ *
+ * Postgres — да, файлы рядом с приложением — да, временная папка — нет.
+ * Последний случай нужно показывать в интерфейсе: молча потерять загруженный
+ * документ о бизнесе хуже, чем сразу сказать, что он не сохранится.
+ */
+export function storageIsEphemeral(): boolean {
+  return databaseUrl() ? false : filesAreEphemeral();
 }
 
 /* ---------- Документы ---------- */

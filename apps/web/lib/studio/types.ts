@@ -63,5 +63,7 @@ export type WorkspaceState = {
     models: LuraModel[];
     search: "gemini" | "brave" | "tavily" | "duckduckgo" | null;
     storage: string;
+    /** Состояние не переживёт перезапуск — интерфейс обязан предупредить. */
+    ephemeral: boolean;
   };
 };

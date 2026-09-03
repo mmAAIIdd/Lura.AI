@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { LURA_MODELS, geminiKey } from "@/lib/studio/config";
 import { currentProvider } from "@/lib/studio/search";
-import { StorageUnavailableError, listDocuments, listThreads, storeLabel } from "@/lib/studio/store";
+import { StorageUnavailableError, listDocuments, listThreads, storageIsEphemeral, storeLabel } from "@/lib/studio/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +28,7 @@ export async function GET() {
       models: LURA_MODELS,
       search: currentProvider(),
       storage: storeLabel(),
+      ephemeral: storageIsEphemeral(),
     },
   });
 }

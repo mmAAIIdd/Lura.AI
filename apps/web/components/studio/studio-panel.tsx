@@ -21,6 +21,7 @@ import {
 } from "@/components/studio/icons";
 import { ModelPicker } from "@/components/studio/model-picker";
 import { REPORT_COMMAND } from "@/lib/studio/command";
+import { cx } from "@/lib/studio/cx";
 import type { LuraModel, StudioMessage, ThreadSummary, ToolTrace } from "@/lib/studio/types";
 
 /**
@@ -97,6 +98,7 @@ type Props = {
   error: string | null;
   busy: boolean;
   ready: boolean;
+  ephemeral: boolean;
   selectedReport: string | null;
   onModel: (model: LuraModel) => void;
   onSelectReport: (messageId: string) => void;
@@ -121,6 +123,7 @@ export function StudioPanel({
   error,
   busy,
   ready,
+  ephemeral,
   selectedReport,
   onModel,
   onSelectReport,
@@ -267,7 +270,7 @@ export function StudioPanel({
             <NewIcon />
           </button>
           <button
-            className={`st-act ${view === "context" ? "is-on" : ""}`}
+            className={cx("st-act", view === "context" && "is-on")}
             onClick={onOpenContext}
             title="Кастомизация: документы о бизнесе и источники"
             aria-label="Кастомизация"
@@ -299,7 +302,7 @@ export function StudioPanel({
         <button
           role="tab"
           aria-selected={tab === "chat"}
-          className={`st-tab ${tab === "chat" ? "is-on" : ""}`}
+          className={cx("st-tab", tab === "chat" && "is-on")}
           onClick={() => setTab("chat")}
         >
           <ChatIcon />
@@ -308,7 +311,7 @@ export function StudioPanel({
         <button
           role="tab"
           aria-selected={tab === "threads"}
-          className={`st-tab ${tab === "threads" ? "is-on" : ""}`}
+          className={cx("st-tab", tab === "threads" && "is-on")}
           onClick={() => setTab("threads")}
         >
           <HistoryIcon />
@@ -320,6 +323,12 @@ export function StudioPanel({
       {tab === "chat" ? (
         <div className="st-stream" ref={stream}>
           {!ready ? <p className="st-warn">Не задан ключ модели — ответы не запускаются.</p> : null}
+          {ephemeral ? (
+            <p className="st-warn">
+              Хранилище временное: документы и разборы пропадут при перезапуске. Задайте STUDIO_DATABASE_URL,
+              чтобы они сохранялись.
+            </p>
+          ) : null}
 
           {!messages.length && !live ? (
             <p className="st-hint">
@@ -343,7 +352,7 @@ export function StudioPanel({
               <article className="st-reply" key={message.id}>
                 <ToolList tools={message.tools ?? []} />
                 <button
-                  className={`st-reply-text ${selectedReport === message.id ? "is-active" : ""}`}
+                  className={cx("st-reply-text", selectedReport === message.id && "is-active")}
                   onClick={() => onSelectReport(message.id)}
                   title="Показать в центре"
                 >
@@ -401,7 +410,7 @@ export function StudioPanel({
                 ) : (
                   <div
                     key={thread.id}
-                    className={`st-thread ${activeThread === thread.id ? "is-active" : ""}`}
+                    className={cx("st-thread", activeThread === thread.id && "is-active")}
                   >
                     <button
                       className="st-thread-open"
@@ -444,7 +453,7 @@ export function StudioPanel({
       <div className="st-composer">
         {problem ? <p className="st-composer-problem">{problem}</p> : null}
 
-        <div className={`st-composer-box ${commandOn ? "is-command" : ""}`}>
+        <div className={cx("st-composer-box", commandOn && "is-command")}>
           <textarea
             ref={area}
             value={value}
@@ -484,7 +493,7 @@ export function StudioPanel({
             </button>
 
             <button
-              className={`st-icon ${commandOn ? "is-on" : ""}`}
+              className={cx("st-icon", commandOn && "is-on")}
               onClick={toggleCommand}
               disabled={busy}
               title={`Разбор по пайплайну: ${REPORT_COMMAND}`}
@@ -556,7 +565,7 @@ function ToolList({ tools, running }: { tools: ToolTrace[]; running?: boolean })
   return (
     <div className="st-tools">
       {tools.map((trace, index) => (
-        <div key={`${trace.name}-${index}`} className={`st-tool ${trace.ok ? "" : "is-failed"}`}>
+        <div key={`${trace.name}-${index}`} className={cx("st-tool", !trace.ok && "is-failed")}>
           <span className="st-tool-name">{TOOL_LABEL[trace.name] ?? trace.name}</span>
           <span className="st-tool-arg" title={trace.argument}>
             {trace.argument}

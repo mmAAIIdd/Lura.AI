@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import type { StudioDocument } from "@/lib/studio/types";
+import { cx } from "@/lib/studio/cx";
 
 /**
  * Кастомизация — то, из чего агент собирает контекст.
@@ -78,7 +79,7 @@ export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBu
       </header>
 
       <section
-        className={`st-dropzone ${dropping ? "is-over" : ""}`}
+        className={cx("st-dropzone", dropping && "is-over")}
         onDragOver={(event) => {
           event.preventDefault();
           setDropping(true);
@@ -198,7 +199,7 @@ function DocumentRow({
         : "вставленный текст";
 
   return (
-    <article className={`st-doc ${primary ? "is-primary" : ""}`}>
+    <article className={cx("st-doc", primary && "is-primary")}>
       <div className="st-doc-main">
         <strong title={document.title}>{document.title}</strong>
         <span title={origin}>{origin}</span>
