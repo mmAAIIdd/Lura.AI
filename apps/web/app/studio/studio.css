@@ -295,6 +295,17 @@ body.st-resizing iframe { pointer-events: none; }
 .st-reply-text.is-active { border-left-color: var(--st-accent); }
 .st-reply-text.is-live { color: var(--st-muted); cursor: default; -webkit-line-clamp: 4; line-clamp: 4; }
 
+/* Описание длинного ответа обрезать не нужно: оно короткое по построению,
+   а подрезка на середине фразы снова превратила бы его в обрывок. */
+.st-reply-text.is-brief { display: block; -webkit-line-clamp: none; line-clamp: none; }
+.st-reply-more {
+  display: block;
+  margin-top: 5px;
+  color: var(--st-muted-soft);
+  font-size: 12.5px;
+}
+.st-reply-text:hover .st-reply-more { color: var(--st-accent); }
+
 /* ---------- Поиск и разборы ---------- */
 
 .st-search {
@@ -647,7 +658,18 @@ body.st-resizing iframe { pointer-events: none; }
 .report blockquote { margin: 0 0 16px; padding: 2px 0 2px 15px; border-left: 2px solid var(--st-line); color: var(--st-muted); }
 .report hr { height: 1px; margin: 28px 0; border: 0; background: var(--st-line); }
 
-.report-table { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--st-line); border-radius: 12px; }
+/* Таблица шире колонки текста выходит за неё в поля: сравнение из четырёх
+   столбцов иначе упирается в 760 пикселей и обрезается на третьем. */
+.report-table {
+  overflow-x: auto;
+  width: calc(100% + 56px);
+  margin: 0 -28px 18px;
+  border: 1px solid var(--st-line);
+  border-radius: 12px;
+}
+@media (max-width: 1180px) {
+  .report-table { width: 100%; margin-inline: 0; }
+}
 .report-table table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .report-table th,
 .report-table td { padding: 11px 14px; border-bottom: 1px solid var(--st-line-soft); text-align: left; vertical-align: top; }

@@ -74,6 +74,33 @@ function plainPreview(markdown: string): string {
     .trim();
 }
 
+/* До этого предела ответ помещается в колонку целиком и остаётся разговором.
+   Дальше он становится документом, и в переписке ему место только описанием. */
+const SHORT_ANSWER_CHARS = 420;
+
+/** Первые предложения целиком, без обрыва посреди слова. */
+function firstSentences(text: string, limit = 190): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= limit) return flat;
+  const window = flat.slice(0, limit + 70);
+  const stop = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+  if (stop > 70) return window.slice(0, stop + 1);
+  return `${flat.slice(0, limit).trimEnd()}…`;
+}
+
+/**
+ * Что показать в переписке вместо ответа.
+ *
+ * Короткий ответ и есть реплика — он идёт целиком. Длинный уходит в окно
+ * вывода, а здесь остаётся описание: о чём он. Обрезанный на восьмой строке
+ * отчёт не описывает ничего — он просто обрывается на середине таблицы.
+ */
+function answerLine(markdown: string): { text: string; whole: boolean } {
+  const plain = plainPreview(markdown);
+  if (plain.length <= SHORT_ANSWER_CHARS) return { text: plain, whole: true };
+  return { text: firstSentences(plain), whole: false };
+}
+
 function attachmentSize(attachment: ComposerAttachment): number {
   return attachment.text ? attachment.text.length : Math.floor(attachment.data.length * 0.75);
 }
@@ -354,16 +381,12 @@ export function StudioPanel({
                 ) : null}
               </article>
             ) : (
-              <article className="st-reply" key={message.id}>
-                <ToolList tools={message.tools ?? []} />
-                <button
-                  className={cx("st-reply-text", selectedReport === message.id && "is-active")}
-                  onClick={() => onSelectReport(message.id)}
-                  title="Показать в центре"
-                >
-                  {plainPreview(message.text)}
-                </button>
-              </article>
+              <Reply
+                key={message.id}
+                message={message}
+                active={selectedReport === message.id}
+                onSelect={() => onSelectReport(message.id)}
+              />
             ),
           )}
 
@@ -559,6 +582,31 @@ export function StudioPanel({
         </div>
       </div>
     </section>
+  );
+}
+
+function Reply({
+  message,
+  active,
+  onSelect,
+}: {
+  message: StudioMessage;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const line = answerLine(message.text);
+  return (
+    <article className="st-reply">
+      <ToolList tools={message.tools ?? []} />
+      <button
+        className={cx("st-reply-text", active && "is-active", !line.whole && "is-brief")}
+        onClick={onSelect}
+        title="Показать в окне вывода"
+      >
+        {line.text}
+        {!line.whole ? <span className="st-reply-more">Полный ответ в окне вывода</span> : null}
+      </button>
+    </article>
   );
 }
 
