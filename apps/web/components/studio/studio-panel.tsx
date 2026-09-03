@@ -322,7 +322,12 @@ export function StudioPanel({
 
       {tab === "chat" ? (
         <div className="st-stream" ref={stream}>
-          {!ready ? <p className="st-warn">Не задан ключ модели — ответы не запускаются.</p> : null}
+          {!ready ? (
+            <p className="st-warn">
+              Не задан ключ модели — ответы не запускаются. Добавьте GEMINI_API_KEY в переменные окружения
+              и пересоберите приложение.
+            </p>
+          ) : null}
           {ephemeral ? (
             <p className="st-warn">
               Хранилище временное: документы и разборы пропадут при перезапуске. Задайте STUDIO_DATABASE_URL,

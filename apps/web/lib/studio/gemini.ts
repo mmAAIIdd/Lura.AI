@@ -50,15 +50,23 @@ function turnSignal(external?: AbortSignal): AbortSignal {
   return external ? AbortSignal.any([external, timeout]) : timeout;
 }
 
+/**
+ * Где искать место для ключа.
+ *
+ * На машине разработчика это файл рядом с приложением, на развёрнутом сайте
+ * такого файла нет вовсе — там переменные задаются в панели площадки. Один
+ * текст на оба случая половину пользователей отправляет искать файл, которого
+ * у них не существует.
+ */
+function missingKeyMessage(): string {
+  return process.env.NODE_ENV === "production"
+    ? "Не задан ключ модели. Добавьте GEMINI_API_KEY в переменные окружения площадки, где развёрнут сайт, и пересоберите его."
+    : "Не задан ключ модели. Добавьте GEMINI_API_KEY в apps/web/.env.local и перезапустите рабочее пространство.";
+}
+
 function keyOrThrow(): string {
   const key = geminiKey();
-  if (!key) {
-    throw new GeminiError(
-      "Не задан ключ модели. Добавьте GEMINI_API_KEY в apps/web/.env.local и перезапустите рабочее пространство.",
-      0,
-      false,
-    );
-  }
+  if (!key) throw new GeminiError(missingKeyMessage(), 0, false);
   return key;
 }
 
