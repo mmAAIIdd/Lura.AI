@@ -8,7 +8,13 @@
      сайте. Раньше первой в списке была Aptos: она есть там, где установлен
      Office, и нет больше нигде, так что шрифт менялся от машины к машине. */
   font-family: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  /* Заголовки набраны антиквой, всё остальное — гротеском. Одна гарнитура на
+     весь сайт читается как черновик: у крупного текста и у интерфейса разные
+     задачи, и разница гарнитур эту разницу и показывает. Source Serif 4 взят
+     с осью оптического размера и с кириллицей — без неё каждый русский
+     заголовок молча уезжал бы в системную антикву. */
+  --font-serif: "Source Serif 4 Variable", ui-serif, Georgia, "Times New Roman", serif;
+  --font-display: var(--font-serif);
   --lura-blue-soft: #20386f;
   /* Тёмно-синий знака — из макета осьминога. */
   --brand: #1b2a5e;
@@ -54,9 +60,9 @@ button, input, select, textarea { font: inherit; }
   color: #0d0d0d;
   font-family: var(--font-display);
   font-size: clamp(42px, 8vw, 78px);
-  font-weight: 760;
-  line-height: 1.02;
-  letter-spacing: 0;
+  font-weight: 440;
+  line-height: 1.06;
+  letter-spacing: -.012em;
 }
 .auth-heading p, .content-panel > p {
   max-width: 620px;
@@ -273,9 +279,9 @@ button, input, select, textarea { font: inherit; }
   background: none;
   font-family: var(--font-display);
   font-size: clamp(46px, 5.4vw, 74px);
-  font-weight: 560;
-  line-height: 1.04;
-  letter-spacing: -.042em;
+  font-weight: 440;
+  line-height: 1.08;
+  letter-spacing: -.014em;
   text-wrap: balance;
 }
 
@@ -283,10 +289,9 @@ button, input, select, textarea { font: inherit; }
   max-width: none;
   margin: 20px 0 0;
   color: #23262d;
-  font-family: var(--font-display);
-  font-size: clamp(20px, 1.6vw, 25px);
+  font-size: clamp(19px, 1.5vw, 23px);
   font-weight: 400;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .auth-page .auth-panel {
@@ -326,9 +331,9 @@ button, input, select, textarea { font: inherit; }
   color: #111318;
   font-family: var(--font-display);
   font-size: clamp(26px, 2.6vw, 38px);
-  font-weight: 620;
-  line-height: 1.1;
-  letter-spacing: -.035em;
+  font-weight: 460;
+  line-height: 1.14;
+  letter-spacing: -.012em;
   text-align: center;
 }
 
