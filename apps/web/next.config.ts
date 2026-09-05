@@ -1,5 +1,14 @@
 import type { NextConfig } from "next";
 
+/* В сборке имя файла под /_next/static содержит хеш содержимого, и вечный
+   кеш там безопасен. В режиме разработки имена постоянные — chunks/main-app.js
+   и chunks/app/<маршрут>/page.js не меняются между пересборками. Помеченные
+   immutable на год, они оседают в кеше браузера навсегда: страница приходит
+   свежая, а скрипт к ней — прошлой версии, и React сообщает о расхождении
+   разметки при каждом открытии. Обычная перезагрузка это не лечит: она берёт
+   подчинённые ресурсы из кеша. */
+const immutableAssets = process.env.NODE_ENV === "production";
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   /* Docker packaging, not a build mode every target wants: the Dockerfile is
@@ -13,13 +22,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        /* Бандлы и шрифты под /_next/static неизменяемы: в имени файла лежит
-           хеш содержимого, и при любой правке меняется имя. Общее правило
-           ниже накрывало их `no-store`, из-за чего браузер выкачивал весь
-           JavaScript заново на каждый заход. */
+        /* Бандлы и шрифты под /_next/static в сборке неизменяемы: в имени
+           файла лежит хеш содержимого, и при любой правке меняется имя. Общее
+           правило ниже накрывало их `no-store`, из-за чего браузер выкачивал
+           весь JavaScript заново на каждый заход. */
         source: "/_next/static/:path*",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          {
+            key: "Cache-Control",
+            value: immutableAssets ? "public, max-age=31536000, immutable" : "no-store, must-revalidate",
+          },
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
