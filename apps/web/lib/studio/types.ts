@@ -61,7 +61,7 @@ export type WorkspaceState = {
   runtime: {
     ready: boolean;
     models: LuraModel[];
-    search: "gemini" | "brave" | "tavily" | "duckduckgo" | null;
+    search: "google" | "gemini" | "brave" | "tavily" | "duckduckgo" | null;
     storage: string;
     /** Состояние не переживёт перезапуск — интерфейс обязан предупредить. */
     ephemeral: boolean;

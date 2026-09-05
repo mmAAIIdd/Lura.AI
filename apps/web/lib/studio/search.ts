@@ -25,7 +25,7 @@ import { decodeEntities } from "@/lib/studio/text";
  */
 
 export type SearchResult = { title: string; url: string; snippet: string };
-export type SearchProvider = "gemini" | "brave" | "tavily" | "duckduckgo";
+export type SearchProvider = "google" | "gemini" | "brave" | "tavily" | "duckduckgo";
 
 let resolvedProvider: SearchProvider | null = null;
 
@@ -33,10 +33,11 @@ export function currentProvider(): SearchProvider | null {
   return resolvedProvider;
 }
 
+const PROVIDER_NAMES: SearchProvider[] = ["google", "gemini", "brave", "tavily", "duckduckgo"];
+
 function configured(): SearchProvider | "auto" {
-  const value = process.env.STUDIO_SEARCH?.trim();
-  if (value === "gemini" || value === "brave" || value === "tavily" || value === "duckduckgo") return value;
-  return "auto";
+  const value = process.env.STUDIO_SEARCH?.trim() as SearchProvider | undefined;
+  return value && PROVIDER_NAMES.includes(value) ? value : "auto";
 }
 
 const UA =
@@ -46,6 +47,61 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function stripTags(value: string): string {
   return decodeEntities(value.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+}
+
+/* ---------- Google ---------- */
+
+/**
+ * Google через Programmable Search Engine.
+ *
+ * Это официальный интерфейс к выдаче Google, а не разбор страницы результатов:
+ * та отдаётся с проверкой на робота и меняет разметку без предупреждения, так
+ * что парсер по ней живёт до первого изменения вёрстки.
+ *
+ * Нужны две вещи: ключ API и идентификатор поисковой системы (cx). Сама
+ * система создаётся в панели Programmable Search Engine и должна быть
+ * настроена на поиск по всему интернету — иначе она ищет по списку сайтов,
+ * который в ней задан, и на общий запрос вернёт пустоту.
+ */
+async function google(query: string, limit: number): Promise<SearchResult[]> {
+  const key = process.env.GOOGLE_SEARCH_KEY?.trim();
+  const cx = process.env.GOOGLE_SEARCH_CX?.trim();
+  if (!key || !cx) throw new Error("нет GOOGLE_SEARCH_KEY или GOOGLE_SEARCH_CX");
+
+  /* За один вызов интерфейс отдаёт максимум десять ссылок. */
+  const count = Math.min(Math.max(limit, 1), 10);
+  const address =
+    `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}` +
+    `&q=${encodeURIComponent(query)}&num=${count}&hl=ru`;
+
+  const response = await fetch(address, { signal: AbortSignal.timeout(20000) });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    let reason = `HTTP ${response.status}`;
+    try {
+      reason = String(JSON.parse(body)?.error?.message || reason).slice(0, 200);
+    } catch {
+      /* Тело не разобралось — хватит и кода ответа. */
+    }
+    /* 429 здесь значит «дневная квота кончилась», и это не поломка: следующий
+       провайдер в цепочке доработает день за него. */
+    throw new Error(`Google ответил ${response.status}: ${reason}`);
+  }
+
+  const data = (await response.json()) as {
+    items?: { title?: string; link?: string; snippet?: string }[];
+  };
+  const results = (data.items ?? [])
+    .filter((item) => item.link)
+    .slice(0, limit)
+    .map((item) => ({
+      title: (item.title ?? item.link!).slice(0, 200),
+      url: item.link!,
+      snippet: (item.snippet ?? "").replace(/\s+/g, " ").trim().slice(0, 400),
+    }));
+
+  if (!results.length) throw new Error("Google вернул пустую выдачу");
+  return results;
 }
 
 /* ---------- Brave ---------- */
@@ -263,13 +319,17 @@ async function duckduckgo(query: string, limit: number): Promise<SearchResult[]>
 }
 
 const PROVIDERS: Record<SearchProvider, (query: string, limit: number) => Promise<SearchResult[]>> = {
+  google,
   gemini: geminiGrounding,
   brave,
   tavily,
   duckduckgo,
 };
 
-const ORDER: SearchProvider[] = ["brave", "tavily", "gemini", "duckduckgo"];
+/* Google первым: это та выдача, которую пользователь и имеет в виду, говоря
+   «поищи в интернете». Дальше по убыванию качества, и последним — тот, что
+   работает без ключа вообще. */
+const ORDER: SearchProvider[] = ["google", "brave", "tavily", "gemini", "duckduckgo"];
 
 export class SearchUnavailableError extends Error {}
 
