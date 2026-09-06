@@ -130,12 +130,8 @@ export function GoogleSignIn({ mode = "login" }: { mode?: "login" | "register" }
   return (
     <AuthShell
       variant={mode}
-      title={mode === "register" ? "Начните свой путь с Lura" : "Вход в Lura"}
-      subtitle={
-        mode === "register"
-          ? "Твой сборщик и аналитик данных по бизнесу"
-          : "Продолжите работу со своими проектами."
-      }
+      title="Начните свой путь с Lura"
+      subtitle="Твой сборщик и аналитик данных по бизнесу"
     >
       {blocked ? (
         <p className="form-error" role="alert">{blocked}</p>
