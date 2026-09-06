@@ -82,7 +82,7 @@ export const API_ROOT = "https://generativelanguage.googleapis.com/v1beta";
  * В разговоре предел ниже: обычный вопрос не стоит десяти походов в сеть, а
  * ждать ответа минуту в чате нельзя.
  */
-export const MAX_TOOL_ROUNDS = Number(process.env.STUDIO_MAX_TOOL_ROUNDS || 8);
+export const MAX_TOOL_ROUNDS = Number(process.env.STUDIO_MAX_TOOL_ROUNDS || 12);
 export const MAX_CHAT_TOOL_ROUNDS = Number(process.env.STUDIO_MAX_CHAT_TOOL_ROUNDS || 4);
 
 /** Ограничения контекста. Подобраны так, чтобы окно модели не переполнялось. */
@@ -91,6 +91,10 @@ export const LIMITS = {
   businessDocChars: 12000,
   /** Столько текста возвращает fetch_url за один вызов. */
   fetchedPageChars: 14000,
+  /** Столько текста документа возвращает read_document за одну часть.
+      Выгрузка отзывов должна доходить до модели целиком, иначе счёт по темам
+      идёт по куску данных и выглядит при этом как счёт по всей выгрузке. */
+  documentReadChars: 40000,
   /** Размер и перекрытие фрагмента для поиска по документам. */
   chunkChars: 1200,
   chunkOverlap: 160,
