@@ -34,7 +34,12 @@ export function StudioReport({ message, streaming }: Props) {
       <div className="st-report">
         <div className="st-idle">
           <div className="st-idle-inner">
-            <LuraLogo className="st-idle-mark" />
+            {/* Знак в рамке, а не сам по себе: выцветший силуэт посреди пустого
+                листа читается как недогрузившаяся картинка, а не как состояние
+                экрана. */}
+            <span className="st-idle-badge">
+              <LuraLogo className="st-idle-mark" />
+            </span>
             <h1>Ответ появится здесь</h1>
             <p>
               Спросите Луру в панели рядом. Полный разбор продукта с отчётом запускает

@@ -38,6 +38,28 @@
 }
 
 .st button { font: inherit; color: inherit; cursor: pointer; }
+
+/* ---------- Размерный ряд знаков ----------
+
+   Все знаки нарисованы на сетке 24×24, поэтому видимая толщина обводки равна
+   stroke-width × размер / 24. Пока размеры шли вразнобой — 13, 15, 16, 17, 19,
+   20 при одной и той же толщине, — обводка получалась от 0,95 до 1,46 пикселя.
+   Ни одно из этих значений не попадает на пиксель, отсюда и мыло: знаки рядом
+   друг с другом выглядели разной жирности и нерезкими.
+
+   Теперь размеров четыре, все чётные, и к каждому подобрана своя толщина так,
+   что на экране обводка везде ровно 1,5 пикселя:
+
+     14px → 2.6     16px → 2.25     18px → 2     20px → 1.8
+
+   Новый знак берёт ближайший размер из ряда вместе с его толщиной. Собственный
+   размер вроде 19px снова разъедет с остальными, и это будет видно.
+
+   Общего правила на `.st svg` здесь намеренно нет: знак Lura нарисован на
+   сетке 64 обводкой в 9.4, подобранной по рендеру, и любая общая толщина
+   превращает его щупальца в волоски. Толщина задаётся рядом с размером —
+   там, где известно, о каком знаке идёт речь. */
+
 .st button:disabled { cursor: default; opacity: .4; }
 
 /* Видимая обводка появляется только при управлении с клавиатуры: мышью её
@@ -70,7 +92,17 @@
    страница, поэтому здесь сказано, что это за экран и с чего начать. */
 .st-idle { display: grid; place-items: center; min-height: 0; padding: 24px; }
 .st-idle-inner { display: grid; justify-items: center; gap: 14px; max-width: 440px; text-align: center; }
-.st-idle-mark { width: 52px; height: 52px; color: #dfe5ee; }
+.st-idle-badge {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 1px solid var(--st-line);
+  border-radius: 16px;
+  background: var(--st-panel);
+  box-shadow: var(--st-lift);
+}
+.st-idle-mark { width: 28px; height: 28px; color: var(--st-muted-soft); }
 .st-idle h1 {
   margin: 0;
   font-family: var(--font-serif, ui-serif, Georgia, serif);
@@ -139,7 +171,7 @@ body.st-resizing iframe { pointer-events: none; }
   transition: color .12s ease, border-color .12s ease;
 }
 .st-reveal:hover { border-color: var(--st-muted-soft); color: var(--st-ink); }
-.st-reveal svg { width: 20px; height: 20px; }
+.st-reveal svg { width: 20px; height: 20px; stroke-width: 1.8; }
 
 /* ---------- Панель ---------- */
 
@@ -168,7 +200,7 @@ body.st-resizing iframe { pointer-events: none; }
   font-weight: 640;
   letter-spacing: -.02em;
 }
-.st-brand-logo { width: 26px; height: 26px; flex: 0 0 auto; color: var(--st-accent); }
+.st-brand-logo { width: 24px; height: 24px; flex: 0 0 auto; color: var(--st-accent); }
 
 .st-panel-actions { display: flex; margin-left: auto; align-items: center; gap: 2px; }
 
@@ -184,7 +216,7 @@ body.st-resizing iframe { pointer-events: none; }
   color: var(--st-muted);
   transition: background-color .12s ease, color .12s ease;
 }
-.st-act svg { width: 20px; height: 20px; }
+.st-act svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .st-act:hover:not(:disabled) { background: var(--st-hover); color: var(--st-ink); }
 .st-act.is-on { background: var(--st-accent-soft); color: var(--st-accent); }
 .st-act-split { width: 1px; height: 20px; margin: 0 5px; background: var(--st-line); }
@@ -215,7 +247,7 @@ body.st-resizing iframe { pointer-events: none; }
   font-weight: 520;
   transition: background-color .14s ease, color .14s ease, box-shadow .14s ease;
 }
-.st-tab svg { width: 17px; height: 17px; flex: 0 0 auto; }
+.st-tab svg { width: 18px; height: 18px; flex: 0 0 auto; stroke-width: 2; }
 .st-tab em {
   padding: 0 6px;
   border-radius: 999px;
@@ -327,12 +359,12 @@ body.st-resizing iframe { pointer-events: none; }
   transition: border-color .12s ease;
 }
 .st-search:focus-within { border-color: var(--st-muted-soft); }
-.st-search > svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--st-muted-soft); }
+.st-search > svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--st-muted-soft); stroke-width: 2; }
 .st-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--st-ink); font: inherit; font-size: 14px; }
 .st-search input:focus { outline: none; }
 .st-search input::placeholder { color: var(--st-muted-soft); }
 .st-search button { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; border-radius: 6px; background: transparent; color: var(--st-muted-soft); }
-.st-search button svg { width: 15px; height: 15px; }
+.st-search button svg { width: 16px; height: 16px; stroke-width: 2.25; }
 .st-search button:hover { color: var(--st-ink); }
 
 .st-thread-list { display: grid; gap: 2px; min-width: 0; }
@@ -376,7 +408,7 @@ body.st-resizing iframe { pointer-events: none; }
   color: var(--st-muted-soft);
 }
 .st-thread-tools button:hover { background: var(--st-sunken); color: var(--st-ink); }
-.st-thread-tools svg { width: 16px; height: 16px; }
+.st-thread-tools svg { width: 16px; height: 16px; stroke-width: 2.25; }
 
 .st-thread-edit {
   width: 100%;
@@ -440,7 +472,7 @@ body.st-resizing iframe { pointer-events: none; }
   color: var(--st-muted);
   transition: background-color .1s ease, color .1s ease;
 }
-.st-icon svg { width: 19px; height: 19px; }
+.st-icon svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .st-icon:hover:not(:disabled) { background: var(--st-sunken); color: var(--st-ink); }
 .st-icon.is-on { background: var(--st-accent-soft); color: var(--st-accent); }
 
@@ -463,7 +495,7 @@ body.st-resizing iframe { pointer-events: none; }
 }
 .st-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-chip button { display: grid; width: 17px; height: 17px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; border-radius: 5px; background: transparent; color: var(--st-muted-soft); }
-.st-chip button svg { width: 13px; height: 13px; }
+.st-chip button svg { width: 14px; height: 14px; stroke-width: 2.6; }
 .st-chip button:hover { color: var(--st-danger); }
 
 .st-send {
@@ -478,7 +510,7 @@ body.st-resizing iframe { pointer-events: none; }
   color: #ffffff;
   transition: background-color .12s ease;
 }
-.st-send svg { width: 19px; height: 19px; }
+.st-send svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .st-send:hover:not(:disabled) { background: #1550bd; }
 .st-send:disabled { background: var(--st-sunken); color: var(--st-muted-soft); }
 .st-send.is-stop { background: var(--st-danger); }
@@ -501,7 +533,7 @@ body.st-resizing iframe { pointer-events: none; }
   font-size: 13px;
   transition: background-color .12s ease, border-color .12s ease, color .12s ease;
 }
-.st-picker-trigger svg { width: 15px; height: 15px; transition: transform .16s ease; }
+.st-picker-trigger svg { width: 16px; height: 16px; stroke-width: 2.25; transition: transform .16s ease; }
 .st-picker-trigger:hover:not(:disabled),
 .st-picker-trigger.is-open { border-color: var(--st-line); background: var(--st-bg); color: var(--st-ink); }
 .st-picker-trigger.is-open svg { transform: rotate(180deg); }
@@ -540,7 +572,7 @@ body.st-resizing iframe { pointer-events: none; }
 }
 .st-picker-item.is-active { background: var(--st-sunken); }
 .st-picker-mark { display: grid; height: 20px; place-items: center; color: var(--st-accent); }
-.st-picker-mark svg { width: 15px; height: 15px; }
+.st-picker-mark svg { width: 16px; height: 16px; stroke-width: 2.25; }
 .st-picker-text { display: grid; min-width: 0; gap: 1px; }
 .st-picker-text b { font-size: 14px; font-weight: 560; letter-spacing: -.01em; }
 .st-picker-text small { color: var(--st-muted-soft); font-size: 12.5px; line-height: 1.35; }

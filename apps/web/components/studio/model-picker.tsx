@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { CheckIcon, ChevronUpIcon } from "@/components/studio/icons";
 import { cx } from "@/lib/studio/cx";
 import type { LuraModel } from "@/lib/studio/types";
 
@@ -91,7 +92,7 @@ export function ModelPicker({ value, options, disabled, onChange }: Props) {
         }}
       >
         <span>{value}</span>
-        <ChevronIcon />
+        <ChevronUpIcon />
       </button>
 
       {open ? (
@@ -147,18 +148,3 @@ export function ModelPicker({ value, options, disabled, onChange }: Props) {
   );
 }
 
-function ChevronIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4.5 9.75 8 6.25l3.5 3.5" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3.5 8.5 6.5 11.5l6-7" />
-    </svg>
-  );
-}

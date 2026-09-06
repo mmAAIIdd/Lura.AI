@@ -157,6 +157,15 @@ export function ChevronIcon(props: Props) {
   );
 }
 
+/** Тот же шеврон остриём вверх: список моделей раскрывается над полем ввода. */
+export function ChevronUpIcon(props: Props) {
+  return (
+    <Glyph {...props}>
+      <path d="m6 15 6-6 6 6" />
+    </Glyph>
+  );
+}
+
 export function CheckIcon(props: Props) {
   return (
     <Glyph {...props}>
