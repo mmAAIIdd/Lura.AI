@@ -19,6 +19,29 @@ const PUBLIC_PREFIXES = [
 ];
 
 /**
+ * Адреса, которые приложение вообще обслуживает.
+ *
+ * Проверка идёт до проверки прав и отвечает на другой вопрос: существует ли
+ * такая страница. Без неё опечатка в адресе выглядела для посетителя как
+ * «страница под паролем» — middleware отправлял на вход любой неизвестный
+ * путь, а `app/not-found.tsx` не открывался вообще никогда.
+ *
+ * Список ведётся вручную и должен повторять состав `app/`. **Новый закрытый
+ * раздел обязательно добавить сюда**: путь, которого здесь нет, считается
+ * несуществующим и отдаётся Next как 404, а не защищается входом.
+ */
+const KNOWN_PREFIXES = [...PUBLIC_PREFIXES, "/studio", "/api/studio"];
+
+/**
+ * Корень сравнивается точно, а не префиксом: `/` — это перенаправление на
+ * регистрацию в `app/page.tsx`, и если пускать по префиксу, открытым станет
+ * весь сайт.
+ */
+function isRoot(pathname: string): boolean {
+  return pathname === "/";
+}
+
+/**
  * Рабочее пространство Lura Studio живёт на своём хранилище и своём ключе
  * Gemini, без Supabase. На машине разработчика оно открывается сразу — иначе
  * локальная проверка упирается в круг по OAuth. В продакшене остаётся за
@@ -102,7 +125,12 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const signedIn = Boolean(data?.claims);
   const { pathname, search } = request.nextUrl;
 
-  if (!signedIn && !matchesPrefix(pathname, openPrefixes())) {
+  if (!signedIn && !isRoot(pathname) && !matchesPrefix(pathname, openPrefixes())) {
+    /* Такой страницы у приложения нет. Пропускаем дальше, чтобы Next отдал
+       404 и свою not-found: отправлять на вход за несуществующим адресом —
+       значит обещать посетителю страницу, которой не существует. */
+    if (!matchesPrefix(pathname, KNOWN_PREFIXES)) return supabaseResponse;
+
     const redirectUrl = request.nextUrl.clone();
     const loginPath = getLoginPath(`${pathname}${search}`);
     const [loginPathname, loginQuery = ""] = loginPath.split("?");
