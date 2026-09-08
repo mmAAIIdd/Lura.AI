@@ -124,6 +124,13 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
             required: ["name", "ids"],
           },
         },
+        breakdown_column: {
+          type: "string",
+          description:
+            "Столбец разреза: канал, оценка, сегмент. По каждой теме вернётся, как она распределена по значениям " +
+            "этого столбца до и после границы. «14 жалоб» и «14 жалоб, из них 11 через поддержку» — разные по " +
+            "ценности утверждения; второе показывает, кого именно задело.",
+        },
         id_column: { type: "string", description: "Столбец идентификатора, если автоопределение ошиблось." },
         date_column: { type: "string", description: "Столбец с датой, если автоопределение ошиблось." },
       },
@@ -364,6 +371,7 @@ async function runCountGroups(args: Record<string, unknown>): Promise<ToolOutcom
     groups,
     boundary: args.boundary ? String(args.boundary) : null,
     boundaries: Array.isArray(args.boundaries) ? args.boundaries.map((value) => String(value)) : null,
+    breakdownColumn: args.breakdown_column ? String(args.breakdown_column) : null,
     idColumn: args.id_column ? String(args.id_column) : null,
     dateColumn: args.date_column ? String(args.date_column) : null,
   });

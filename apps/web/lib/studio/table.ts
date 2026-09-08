@@ -143,7 +143,33 @@ export type SeriesStat = {
   изменение_процентов: number | null;
   вердикт: string;
   разброс_до: number | null;
+  /** Насколько сдвиг велик в единицах обычного разброса ряда до границы. */
+  сила_сдвига_сигм: number | null;
+  /** Сколько замеров подряд сразу после границы вышли за обычный разброс. */
+  подряд_за_порогом: number | null;
+  /** Где ряд ломается по самим данным, без подсказки о дате релиза. */
+  перелом: { дата: string | null; позиция: number; сдвиг: number } | null;
 };
+
+/**
+ * Точка перелома ряда.
+ *
+ * Ищется разбиение, при котором средние двух половин расходятся сильнее всего.
+ * Нужна затем, что дату границы задаёт человек, а данные могут ломаться в
+ * другом месте: совпадение найденного перелома с датой релиза — довод в пользу
+ * связи, расхождение — довод против, и оба вывода сильнее, чем сравнение по
+ * заранее выбранной дате.
+ */
+function changePoint(values: number[], dates: (string | null)[]): SeriesStat["перелом"] {
+  if (values.length < 6) return null;
+  let best = { позиция: -1, сдвиг: 0 };
+  for (let k = 2; k <= values.length - 2; k += 1) {
+    const shift = Math.abs(mean(values.slice(0, k)) - mean(values.slice(k)));
+    if (shift > best.сдвиг) best = { позиция: k, сдвиг: shift };
+  }
+  if (best.позиция < 0) return null;
+  return { дата: dates[best.позиция] ?? null, позиция: best.позиция, сдвиг: round(best.сдвиг) };
+}
 
 /**
  * Изменился показатель или колебался в своих обычных пределах.
@@ -257,12 +283,35 @@ export function analyzeTable(
         });
       }
 
+      /* Сила сдвига и его устойчивость. Одна неделя за порогом — выброс,
+         пять подряд — новый уровень ряда, и это разные выводы. */
+      const spread = before.length > 1 ? stdev(before) : 0;
+      const baseline = before.length ? mean(before) : null;
+      const сила = spread > 0 && baseline !== null && after.length
+        ? round(Math.abs(mean(after) - baseline) / spread)
+        : null;
+      let подряд: number | null = null;
+      if (spread > 0 && baseline !== null && after.length) {
+        подряд = 0;
+        for (const value of after) {
+          if (Math.abs(value - baseline) > spread) подряд += 1;
+          else break;
+        }
+      }
+
+      const ordered = table.rows
+        .map((row) => ({ value: toNumber(row[column] ?? ""), date: dateColumn ? normalizeDate(row[dateColumn]) : null }))
+        .filter((entry): entry is { value: number; date: string | null } => entry.value !== null);
+
       ряды.push({
         столбец: column,
         до: before.length ? { значений: before.length, среднее: round(mean(before)), минимум: Math.min(...before), максимум: Math.max(...before) } : null,
         после: after.length ? { значений: after.length, среднее: round(mean(after)), минимум: Math.min(...after), максимум: Math.max(...after) } : null,
         последние_4: tail.length ? round(mean(tail)) : null,
         крайнее_после: крайнее,
+        сила_сдвига_сигм: сила,
+        подряд_за_порогом: подряд,
+        перелом: changePoint(ordered.map((e) => e.value), ordered.map((e) => e.date)),
         изменение_процентов: изменение,
         вердикт,
         разброс_до: before.length > 1 ? round(stdev(before)) : null,
@@ -302,7 +351,10 @@ export function analyzeTable(
     примечание:
       "Числа посчитаны по всей таблице целиком, а не по фрагментам. Переносить их в отчёт можно как есть. " +
       "Вердикт «не изменился» означает, что сдвиг среднего не превысил обычного разброса ряда до границы — " +
-      "такой показатель нельзя называть просевшим или выросшим.",
+      "такой показатель нельзя называть просевшим или выросшим. " +
+      "«сила_сдвига_сигм» показывает, во сколько обычных разбросов уложился сдвиг: до одного — шум, больше двух — заметное движение. " +
+      "«подряд_за_порогом» отличает выброс на одном замере от нового уровня ряда. " +
+      "«перелом» найден по самим данным, без оглядки на дату границы: совпал с релизом — довод в пользу связи, разошёлся — против.",
   };
 }
 
@@ -319,6 +371,8 @@ export type GroupCount = {
   место_по_величине: number;
   /** Разбивка по периодам между границами: видно, затухла тема или держится. */
   по_периодам?: Record<string, number>;
+  /** Разрез темы по столбцу: из какого канала пришли жалобы, с какой оценкой. */
+  разрез?: Record<string, { до: number; после: number }>;
 };
 
 export type GroupAnalysis = {
@@ -327,6 +381,7 @@ export type GroupAnalysis = {
   строк_после: number | null;
   граница: string | null;
   столбец_идентификатора: string;
+  столбец_разреза: string | null;
   периоды: string[];
   темы: GroupCount[];
   сумма_по_темам_после: number;
@@ -360,6 +415,9 @@ export function countGroups(
     boundaries?: string[] | null;
     idColumn?: string | null;
     dateColumn?: string | null;
+    /** Столбец разреза: канал, оценка, сегмент. «14 жалоб» и «14 жалоб, из
+        них 11 через поддержку» — разные по ценности утверждения. */
+    breakdownColumn?: string | null;
   },
 ): GroupAnalysis | { ошибка: string } {
   const idColumn = options.idColumn && table.columns.includes(options.idColumn)
@@ -429,6 +487,26 @@ export function countGroups(
     }
   }
 
+  const breakdown = options.breakdownColumn && table.columns.includes(options.breakdownColumn)
+    ? options.breakdownColumn
+    : null;
+  const perCut = new Map<string, Record<string, { до: number; после: number }>>();
+  if (breakdown) {
+    for (const group of options.groups) {
+      const cut: Record<string, { до: number; после: number }> = {};
+      for (const raw of group.ids) {
+        const row = byId.get(String(raw).trim());
+        if (!row) continue;
+        const key = (row[breakdown] ?? "").trim() || "—";
+        cut[key] ??= { до: 0, после: 0 };
+        const side = before(row);
+        if (side === true) cut[key].до += 1;
+        else if (side === false) cut[key].после += 1;
+      }
+      perCut.set(group.name, cut);
+    }
+  }
+
   const ranked = [...counted].sort((a, b) => b.после - a.после);
   const темы: GroupCount[] = counted.map((entry) => ({
     тема: entry.тема,
@@ -438,6 +516,7 @@ export function countGroups(
     доля_после_процентов: rowsAfter ? Number(((entry.после / rowsAfter) * 100).toFixed(1)) : null,
     место_по_величине: ranked.findIndex((candidate) => candidate.тема === entry.тема) + 1,
     ...(perPeriod.has(entry.тема) ? { по_периодам: perPeriod.get(entry.тема) } : {}),
+    ...(perCut.has(entry.тема) ? { разрез: perCut.get(entry.тема) } : {}),
   }));
 
   const unassigned = [...byId.keys()].filter((id) => !assigned.has(id));
@@ -469,6 +548,7 @@ export function countGroups(
     строк_после: boundary && dateColumn ? rowsAfter : null,
     граница: boundary,
     столбец_идентификатора: idColumn,
+    столбец_разреза: breakdown,
     периоды: periods.map((period) => period.label),
     темы,
     сумма_по_темам_после: sumAfter,
