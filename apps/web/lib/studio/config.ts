@@ -59,12 +59,36 @@ function fallbackModels(): string[] {
  * поэтому при 429/404 клиент спускается по цепочке. Наружу подмена не
  * просачивается: пользователь выбрал lura-pro и видит lura-pro.
  */
-export function modelChain(model: LuraModel = DEFAULT_MODEL): string[] {
+/**
+ * Урезанные модели не годятся под контракт разбора.
+ *
+ * Замеры показали, чем это кончается: на самой простой модели цепочки отчёт
+ * сжимался вдвое, из него пропадали целые разделы, и там же — единственный раз
+ * за весь эксперимент — появилось выдуманное число. Наружу при этом уходит то
+ * же имя профиля, и по отчёту не видно, на чём он получен.
+ *
+ * Поэтому в разборе такие модели из цепочки убираются. Лучше честно не
+ * ответить, чем отдать разбор, которому нельзя верить: пропуск читатель
+ * заметит, а правдоподобную выдумку — нет.
+ */
+function isReducedTier(name: string): boolean {
+  /* Слово целиком, а не подстрока: «mini» сидит внутри самого «gemini», и
+     проверка на вхождение вычёркивает из цепочки вообще все модели. */
+  return /(^|[-_.])(lite|nano|mini|small)([-_.]|$)/i.test(name);
+}
+
+export function modelChain(model: LuraModel = DEFAULT_MODEL, mode: "report" | "chat" = "chat"): string[] {
   const head =
     model === "lura-pro"
       ? process.env.LURA_PRO_MODEL?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-3.1-pro-preview"
       : process.env.LURA_FAST_MODEL?.trim() || "gemini-3-flash-preview";
-  return [head, ...fallbackModels().filter((name) => name !== head)];
+  const chain = [head, ...fallbackModels().filter((name) => name !== head)];
+  if (mode !== "report") return chain;
+
+  /* Голова остаётся всегда: если её выбрали явно, подменять её тем более
+     нечем. Отсеиваются только запасные. */
+  const kept = chain.filter((name, index) => index === 0 || !isReducedTier(name));
+  return kept.length ? kept : chain;
 }
 
 /** Все известные модели без повторов — для служебных вызовов вроде grounding. */

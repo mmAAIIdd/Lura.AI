@@ -133,7 +133,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
     attachments: attachments.map((attachment) => ({ name: attachment.name, mime: attachment.mimeType })),
   };
 
-  const chain = modelChain(tier);
+  const chain = modelChain(tier, mode === "report" ? "report" : "chat");
   const maxRounds = mode === "report" ? MAX_TOOL_ROUNDS : MAX_CHAT_TOOL_ROUNDS;
   const traces: ToolTrace[] = [];
   let answer = "";
