@@ -25,8 +25,6 @@ import type { StudioNode } from "@/lib/studio/types";
  * в согласии с первой при каждом переименовании.
  */
 
-export type ExplorerHandle = { refresh: () => Promise<void> };
-
 type Draft = { parentId: string | null; kind: StudioNode["kind"] } | null;
 
 type Props = {

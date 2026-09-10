@@ -44,7 +44,6 @@ export function StudioScreen() {
   const [view, setView] = useState<View>("report");
   /* Проводник: открытый файл, счётчик перечитывания дерева и счётчик запусков
      проверки. Счётчики, а не флаги: повторное нажатие обязано сработать. */
-  const [explorerOpen, setExplorerOpen] = useState(true);
   const [openedFile, setOpenedFile] = useState<StudioNode | null>(null);
   const [treeRevision, setTreeRevision] = useState(0);
   const [checkToken, setCheckToken] = useState(0);
@@ -330,8 +329,7 @@ export function StudioScreen() {
         } as React.CSSProperties
       }
     >
-      {explorerOpen ? (
-        <FileExplorer
+      <FileExplorer
           openedId={openedFile?.id ?? null}
           revision={treeRevision}
           onOpen={(node) => {
@@ -348,8 +346,7 @@ export function StudioScreen() {
             setOpenedFile(null);
             setView("report");
           }}
-        />
-      ) : null}
+      />
 
       <main className="st-main">
         {view === "file" && openedFile ? (
