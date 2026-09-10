@@ -1,4 +1,4 @@
-import type { DocumentKind, StudioDocument, StudioThread, ThreadSummary } from "@/lib/studio/types";
+import type { DocumentKind, StudioDocument, StudioNode, StudioThread, ThreadSummary } from "@/lib/studio/types";
 
 /**
  * Контракт хранилища рабочего пространства.
@@ -52,6 +52,15 @@ export interface StudioStore {
 
   saveArtifact(id: string, markdown: string): Promise<void>;
   readArtifact(id: string): Promise<string | null>;
+
+  /* ---------- Проект: дерево папок и файлов отчётов ---------- */
+
+  listNodes(): Promise<StudioNode[]>;
+  /** Создаёт или обновляет узел. Содержимое null — не трогать существующее. */
+  saveNode(node: StudioNode, content: string | null): Promise<StudioNode>;
+  readNodeContent(id: string): Promise<string | null>;
+  /** Удаляет один узел. Обход вложенных — на слое выше, где известно дерево. */
+  deleteNode(id: string): Promise<void>;
 }
 
 /**
@@ -64,4 +73,4 @@ export interface StudioStore {
  */
 export class StorageUnavailableError extends Error {}
 
-export type { DocumentKind, StudioDocument, StudioThread, ThreadSummary };
+export type { DocumentKind, StudioDocument, StudioNode, StudioThread, ThreadSummary };

@@ -114,6 +114,16 @@ async function ensureSchema(): Promise<void> {
         markdown text not null,
         created_at timestamptz not null default now()
       );
+
+      create table if not exists studio.nodes (
+        id text primary key,
+        parent_id text references studio.nodes(id) on delete cascade,
+        kind text not null,
+        name text not null,
+        content text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
     `);
 
     /* Индекс по векторам отдельно: на старом pgvector нет hnsw, и ронять из-за
@@ -346,6 +356,53 @@ export function createPostgresStore(): StudioStore {
       const conn = await db();
       const rows = await conn`select markdown from studio.artifacts where id = ${id}`;
       return rows.length ? String(rows[0].markdown) : null;
+    },
+
+    /* ---------- Проект ---------- */
+
+    async listNodes() {
+      const conn = await db();
+      const rows = await conn`
+        select id, parent_id, kind, name, created_at, updated_at,
+               case when kind = 'file' then coalesce(length(content), 0) else null end as chars
+        from studio.nodes order by name asc
+      `;
+      return rows.map((row) => ({
+        id: String(row.id),
+        parentId: row.parent_id === null ? null : String(row.parent_id),
+        kind: row.kind === "folder" ? ("folder" as const) : ("file" as const),
+        name: String(row.name),
+        createdAt: new Date(row.created_at as string).toISOString(),
+        updatedAt: new Date(row.updated_at as string).toISOString(),
+        chars: row.chars === null ? null : Number(row.chars),
+      }));
+    },
+
+    async saveNode(node, content) {
+      const conn = await db();
+      /* content = null означает «не трогать»: переименование не должно
+         стирать текст отчёта. Поэтому coalesce на исключённом значении. */
+      await conn`
+        insert into studio.nodes (id, parent_id, kind, name, content, updated_at)
+        values (${node.id}, ${node.parentId}, ${node.kind}, ${node.name}, ${content}, now())
+        on conflict (id) do update set
+          parent_id = excluded.parent_id,
+          name = excluded.name,
+          content = coalesce(excluded.content, studio.nodes.content),
+          updated_at = now()
+      `;
+      return { ...node, chars: node.kind === "folder" ? null : content !== null ? content.length : node.chars };
+    },
+
+    async readNodeContent(id) {
+      const conn = await db();
+      const rows = await conn`select content from studio.nodes where id = ${id}`;
+      return rows.length && rows[0].content !== null ? String(rows[0].content) : null;
+    },
+
+    async deleteNode(id) {
+      const conn = await db();
+      await conn`delete from studio.nodes where id = ${id}`;
     },
   };
 }

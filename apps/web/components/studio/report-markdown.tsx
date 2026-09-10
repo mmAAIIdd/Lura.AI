@@ -2,6 +2,9 @@
 
 import { Fragment, useMemo, type ReactNode } from "react";
 
+import { FigureIssue, ReportChart, ReportTable } from "@/components/studio/report-figures";
+import { parseChartSpec, parseTableSpec } from "@/lib/studio/chart";
+
 /**
  * Рендер отчёта.
  *
@@ -47,6 +50,7 @@ type Block =
   | { kind: "list"; ordered: boolean; start: number; items: string[] }
   | { kind: "table"; head: string[]; rows: string[][] }
   | { kind: "code"; text: string }
+  | { kind: "figure"; figure: "chart" | "table"; text: string }
   | { kind: "quote"; text: string }
   | { kind: "rule" }
   | { kind: "paragraph"; text: string };
@@ -82,13 +86,21 @@ function parseBlocks(source: string): Block[] {
 
     if (trimmed.startsWith("```")) {
       flush();
+      const language = trimmed.slice(3).trim().toLowerCase();
       const body: string[] = [];
       i += 1;
       while (i < lines.length && !lines[i].trim().startsWith("```")) {
         body.push(lines[i]);
         i += 1;
       }
-      blocks.push({ kind: "code", text: body.join("\n") });
+      const text = body.join("\n");
+      /* Блок «lura-chart» или «lura-table» — не код, а фигура: модель кладёт
+         в него данные, рисует приложение. */
+      if (language === "lura-chart" || language === "lura-table") {
+        blocks.push({ kind: "figure", figure: language === "lura-chart" ? "chart" : "table", text });
+      } else {
+        blocks.push({ kind: "code", text });
+      }
       continue;
     }
 
@@ -203,6 +215,18 @@ export function ReportMarkdown({ source }: { source: string }) {
               </table>
             </div>
           );
+        }
+        if (block.kind === "figure") {
+          if (block.figure === "chart") {
+            const parsed = parseChartSpec(block.text);
+            return "issue" in parsed
+              ? <FigureIssue key={index} issue={parsed.issue} />
+              : <ReportChart key={index} spec={parsed.spec} />;
+          }
+          const parsed = parseTableSpec(block.text);
+          return "issue" in parsed
+            ? <FigureIssue key={index} issue={parsed.issue} />
+            : <ReportTable key={index} spec={parsed.spec} />;
         }
         if (block.kind === "code") return <pre key={index}>{block.text}</pre>;
         if (block.kind === "quote") return <blockquote key={index}>{renderInline(block.text)}</blockquote>;

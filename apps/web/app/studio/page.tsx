@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { StudioScreen } from "@/components/studio/studio-screen";
 
 import "./studio.css";
+import "./explorer.css";
 
 export const metadata: Metadata = {
   title: "Lura — рабочее пространство",

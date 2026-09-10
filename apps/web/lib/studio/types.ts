@@ -67,3 +67,21 @@ export type WorkspaceState = {
     ephemeral: boolean;
   };
 };
+
+/**
+ * Узел проекта: папка или файл отчёта.
+ *
+ * Дерево хранится плоским списком со ссылкой на родителя, а не вложенными
+ * объектами: так переименование и перенос — правка одной записи, а не
+ * пересборка всей ветки, и порядок обхода задаёт интерфейс, а не хранилище.
+ */
+export type StudioNode = {
+  id: string;
+  parentId: string | null;
+  kind: "folder" | "file";
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Размер содержимого в символах. Для папки — null. */
+  chars: number | null;
+};

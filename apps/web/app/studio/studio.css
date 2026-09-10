@@ -22,9 +22,10 @@
 
   --st-panel-w: 440px;
   --st-grip-w: 6px;
+  --st-explorer-w: 276px;
 
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--st-grip-w) var(--st-panel-w);
+  grid-template-columns: var(--st-explorer-w) minmax(0, 1fr) var(--st-grip-w) var(--st-panel-w);
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100svh;
@@ -740,4 +741,98 @@ body.st-resizing iframe { pointer-events: none; }
   .st-panel { max-height: 60vh; border-left: 0; border-top: 1px solid var(--st-line); }
   .st.no-panel .st-panel { display: none; }
   .st-report-body, .st-context { padding: 24px 18px 40px; }
+}
+
+/* ---------- Графики и таблицы отчёта ---------- */
+
+.st-fig { margin: 20px 0 0; padding: 0; }
+.st-fig-title {
+  margin: 0 0 10px;
+  color: var(--st-ink);
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -.01em;
+}
+.st-fig-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 8px;
+  color: var(--st-muted);
+  font-size: 12.5px;
+}
+.st-fig-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.st-fig-legend i { width: 9px; height: 9px; border-radius: 2px; }
+
+.st-fig-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  border: 1px solid var(--st-line);
+  border-radius: 12px;
+  background: var(--st-bg);
+}
+.st-fig-grid { stroke: var(--st-line-soft); stroke-width: 1; }
+.st-fig-axis { stroke: var(--st-line); stroke-width: 1; }
+.st-fig-tick { fill: var(--st-muted-soft); font-size: 11px; }
+.st-fig-cat { fill: var(--st-muted); font-size: 11.5px; }
+/* Отметка события: пунктир, чтобы не спорить с самими данными. */
+.st-fig-marker { stroke: var(--st-muted-soft); stroke-width: 1; stroke-dasharray: 3 3; }
+.st-fig-marker-label { fill: var(--st-muted); font-size: 10.5px; }
+.st-fig-baseline { stroke: var(--st-danger); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .75; }
+.st-fig-baseline-label { fill: var(--st-danger); font-size: 10.5px; font-weight: 600; }
+
+.st-fig-table { margin-top: 18px; }
+.st-fig-scroll { overflow-x: auto; border: 1px solid var(--st-line); border-radius: 12px; }
+.st-fig-table table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.st-fig-table th,
+.st-fig-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--st-line-soft);
+  text-align: left;
+  vertical-align: middle;
+}
+.st-fig-table th {
+  position: sticky;
+  top: 0;
+  background: var(--st-panel);
+  color: var(--st-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* Числа выравниваются по правому краю и набираются моноширинными цифрами:
+   иначе разряды не выстраиваются в столбик и колонку невозможно читать. */
+.st-fig-table th.num,
+.st-fig-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.st-fig-table tbody tr:last-child td { border-bottom: 0; }
+.st-fig-table tbody tr:hover td { background: var(--st-panel); }
+.st-fig-table tfoot td {
+  border-top: 1px solid var(--st-line);
+  background: var(--st-panel);
+  font-weight: 640;
+}
+.st-fig-unit { color: var(--st-muted-soft); font-weight: 400; }
+
+/* Полоса внутри ячейки: доля видна глазом, число остаётся точным. */
+.st-fig-cell { position: relative; display: block; }
+.st-fig-cell-bar {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--st-accent-soft);
+  transform: translateY(-50%);
+}
+.st-fig-cell-text { position: relative; }
+
+.st-fig-issue {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--st-line);
+  border-radius: 10px;
+  background: var(--st-panel);
+  color: var(--st-muted);
+  font-size: 13px;
 }

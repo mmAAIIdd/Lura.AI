@@ -8,6 +8,7 @@ import {
   type ChunkHit,
   type DocumentDraft,
   type StudioDocument,
+  type StudioNode,
   type StudioStore,
   type StudioThread,
   type ThreadSummary,
@@ -28,6 +29,7 @@ type Paths = {
   index: string;
   threads: string;
   artifacts: string;
+  project: string;
 };
 
 function paths(root: string): Paths {
@@ -37,6 +39,7 @@ function paths(root: string): Paths {
     index: path.join(root, "index"),
     threads: path.join(root, "threads"),
     artifacts: path.join(root, "artifacts"),
+    project: path.join(root, "project"),
   };
 }
 
@@ -53,7 +56,7 @@ async function usable(root: string): Promise<Paths | null> {
   const dirs = paths(root);
   try {
     await Promise.all(
-      [dirs.root, dirs.documents, dirs.index, dirs.threads, dirs.artifacts].map((dir) =>
+      [dirs.root, dirs.documents, dirs.index, dirs.threads, dirs.artifacts, dirs.project].map((dir) =>
         fs.mkdir(dir, { recursive: true }),
       ),
     );
@@ -301,6 +304,49 @@ export function createFileStore(): StudioStore {
     async readArtifact(id) {
       const dirs = await ready();
       return fs.readFile(path.join(dirs.artifacts, `${id}.md`), "utf8").catch(() => null);
+    },
+
+    /* ---------- Проект ----------
+       Опись дерева лежит одним файлом, содержимое каждого файла — рядом
+       отдельным .md. Так дерево читается одним чтением, а не обходом каталога
+       на каждый рендер, и при этом отчёт остаётся обычным файлом на диске,
+       который можно открыть мимо приложения. */
+
+    async listNodes() {
+      const dirs = await ready();
+      return (await readJson<StudioNode[]>(path.join(dirs.project, "index.json"))) ?? [];
+    },
+
+    async saveNode(node, content) {
+      const dirs = await ready();
+      const file = path.join(dirs.project, "index.json");
+      const nodes = (await readJson<StudioNode[]>(file)) ?? [];
+
+      if (content !== null && node.kind === "file") {
+        await fs.writeFile(path.join(dirs.project, `${node.id}.md`), content, "utf8");
+      }
+      const saved: StudioNode = {
+        ...node,
+        chars: node.kind === "folder" ? null : content !== null ? content.length : node.chars,
+      };
+      const at = nodes.findIndex((item) => item.id === node.id);
+      if (at >= 0) nodes[at] = saved;
+      else nodes.push(saved);
+      await writeJson(file, nodes);
+      return saved;
+    },
+
+    async readNodeContent(id) {
+      const dirs = await ready();
+      return fs.readFile(path.join(dirs.project, `${id}.md`), "utf8").catch(() => null);
+    },
+
+    async deleteNode(id) {
+      const dirs = await ready();
+      const file = path.join(dirs.project, "index.json");
+      const nodes = (await readJson<StudioNode[]>(file)) ?? [];
+      await writeJson(file, nodes.filter((item) => item.id !== id));
+      await fs.rm(path.join(dirs.project, `${id}.md`), { force: true });
     },
   };
 }

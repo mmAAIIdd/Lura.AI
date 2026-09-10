@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { FileExplorer } from "@/components/studio/file-explorer";
+import { FileView } from "@/components/studio/file-view";
 import { PanelIcon } from "@/components/studio/icons";
 import { cx } from "@/lib/studio/cx";
 import { StudioContext } from "@/components/studio/studio-context";
 import { StudioPanel, type ComposerAttachment } from "@/components/studio/studio-panel";
 import { StudioReport } from "@/components/studio/studio-report";
-import type { LuraModel, StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types";
+import type { LuraModel, StudioNode, StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types";
 
 /**
  * Рабочее пространство: рельса, окно вывода и диалог.
@@ -24,7 +26,7 @@ const EMPTY: WorkspaceState = {
 };
 
 type Live = { text: string; tools: ToolTrace[] };
-type View = "report" | "context";
+type View = "report" | "context" | "file";
 
 /* Границы панели. Уже нижней в ней не помещаются ни названия разборов, ни
    поле ввода; шире верхней — центр становится колонкой текста в пол-экрана. */
@@ -40,6 +42,12 @@ export function StudioScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>("report");
+  /* Проводник: открытый файл, счётчик перечитывания дерева и счётчик запусков
+     проверки. Счётчики, а не флаги: повторное нажатие обязано сработать. */
+  const [explorerOpen, setExplorerOpen] = useState(true);
+  const [openedFile, setOpenedFile] = useState<StudioNode | null>(null);
+  const [treeRevision, setTreeRevision] = useState(0);
+  const [checkToken, setCheckToken] = useState(0);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [model, setModel] = useState<LuraModel>("lura-pro");
   const [panelOpen, setPanelOpen] = useState(true);
@@ -322,8 +330,39 @@ export function StudioScreen() {
         } as React.CSSProperties
       }
     >
+      {explorerOpen ? (
+        <FileExplorer
+          openedId={openedFile?.id ?? null}
+          revision={treeRevision}
+          onOpen={(node) => {
+            setOpenedFile(node);
+            setView("file");
+          }}
+          onCheck={(node) => {
+            setOpenedFile(node);
+            setView("file");
+            setCheckToken((value) => value + 1);
+          }}
+          onClosed={(id) => {
+            if (openedFile?.id !== id) return;
+            setOpenedFile(null);
+            setView("report");
+          }}
+        />
+      ) : null}
+
       <main className="st-main">
-        {view === "context" ? (
+        {view === "file" && openedFile ? (
+          <FileView
+            node={openedFile}
+            checkToken={checkToken}
+            onSaved={() => setTreeRevision((value) => value + 1)}
+            onClose={() => {
+              setOpenedFile(null);
+              setView("report");
+            }}
+          />
+        ) : view === "context" ? (
           <StudioContext
             documents={workspace.documents}
             busy={busy}
@@ -361,7 +400,7 @@ export function StudioScreen() {
         messages={messages}
         threads={workspace.threads}
         activeThread={thread?.id ?? null}
-        view={view}
+        view={view === "context" ? "context" : "report"}
         model={model}
         models={workspace.runtime.models}
         live={live}

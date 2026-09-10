@@ -23,6 +23,7 @@ import {
   type StudioThread,
   type ToolTrace,
 } from "@/lib/studio/store";
+import { saveReportToProject } from "@/lib/studio/project-write";
 import { TOOL_DECLARATIONS, runTool } from "@/lib/studio/tools";
 
 /**
@@ -241,8 +242,15 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   thread.updatedAt = new Date().toISOString();
   if (thread.messages.length <= 2) thread.title = titleFrom(input.prompt);
 
-  await saveArtifact(artifactId, buildArtifact(parsed.text || parsed.raw, agentMessage));
+  const artifact = buildArtifact(parsed.text || parsed.raw, agentMessage);
+  await saveArtifact(artifactId, artifact);
   await saveThread(thread);
+
+  /* Разбор дополнительно ложится файлом в проект. Только разбор: складывать
+     туда каждую реплику разговора значит завалить дерево мусором. */
+  if (mode === "report" && answer.trim()) {
+    await saveReportToProject(titleFrom(input.prompt), artifact);
+  }
 
   yield { type: "done", thread, message: agentMessage };
 }

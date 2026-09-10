@@ -1,0 +1,258 @@
+/* Проводник проекта и открытый файл.
+   Вынесено из studio.css отдельным файлом: там уже восемь сотен строк про
+   панель и отчёт, и ещё двести про дерево сделали бы поиск по файлу
+   бесполезным. */
+
+.st-explorer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  min-height: 0;
+  border-right: 1px solid var(--st-line);
+  background: var(--st-panel);
+}
+
+.st-explorer-head {
+  display: flex;
+  height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px 0 14px;
+  color: var(--st-muted);
+  font-size: 11.5px;
+  font-weight: 640;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.st-explorer-count { font-weight: 500; letter-spacing: 0; text-transform: none; }
+
+.st-explorer-body { min-height: 0; padding: 0 6px 8px; overflow: auto; }
+
+.st-tree-root {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--st-ink);
+  font-size: 12.5px;
+  font-weight: 680;
+  letter-spacing: .02em;
+  text-align: left;
+}
+.st-tree-root:hover { background: var(--st-hover); }
+
+.st-tree-list { margin: 0; padding: 0; list-style: none; }
+
+.st-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  border-radius: 6px;
+}
+.st-tree-row:hover { background: var(--st-hover); }
+.st-tree-row.is-on { background: var(--st-accent-soft); }
+.st-tree-row.is-on .st-tree-name { color: var(--st-accent); font-weight: 560; }
+
+.st-tree-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--st-ink);
+  font-size: 13px;
+  text-align: left;
+}
+.st-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Стрелка папки поворачивается, у файла её место остаётся пустым — иначе
+   имена файлов и папок съезжают друг относительно друга. */
+.st-tree-caret {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--st-muted-soft);
+  transform: rotate(-90deg);
+  transition: transform .12s ease;
+}
+.st-tree-caret.is-open { transform: rotate(0deg); }
+.st-tree-caret svg { width: 14px; height: 14px; stroke-width: 2.6; }
+
+.st-tree-tools { display: none; flex: 0 0 auto; gap: 1px; }
+.st-tree-row:hover .st-tree-tools,
+.st-tree-row.is-on .st-tree-tools { display: flex; }
+.st-tree-tools button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--st-muted);
+}
+.st-tree-tools button:hover { background: var(--st-sunken); color: var(--st-ink); }
+.st-tree-tools svg { width: 14px; height: 14px; stroke-width: 2.6; }
+
+.st-tree-input {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--st-accent);
+  border-radius: 5px;
+  background: var(--st-bg);
+  color: var(--st-ink);
+  font-size: 13px;
+  outline: none;
+}
+
+.st-explorer-empty { margin: 10px 8px; color: var(--st-muted-soft); font-size: 12.5px; line-height: 1.55; }
+
+.st-explorer-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px 8px 14px;
+  border-top: 1px solid var(--st-line);
+  background: #fdf2f0;
+  color: var(--st-danger);
+  font-size: 12.5px;
+}
+.st-explorer-error button { margin-left: auto; border: 0; background: transparent; color: inherit; }
+.st-explorer-error svg { width: 14px; height: 14px; stroke-width: 2.6; }
+
+.st-explorer-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 8px;
+  border-top: 1px solid var(--st-line);
+}
+/* Кнопка проверки исключена намеренно: у неё есть подпись, и общая ширина
+   иконочной кнопки обрезала бы текст. Исключение в селекторе, а не !important
+   поверх — так правило остаётся читаемым и переопределяемым дальше. */
+.st-explorer-bar > button:not(.st-explorer-check) {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--st-muted);
+  transition: background-color .12s ease, color .12s ease;
+}
+.st-explorer-bar > button:not(.st-explorer-check):hover:not(:disabled) { background: var(--st-hover); color: var(--st-ink); }
+.st-explorer-bar > button:not(.st-explorer-check):disabled { color: var(--st-line); }
+.st-explorer-bar svg { width: 16px; height: 16px; stroke-width: 2.25; }
+.st-explorer-gap { flex: 1 1 auto; }
+
+.st-explorer-check {
+  display: inline-flex;
+  width: auto;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--st-line);
+  border-radius: 7px;
+  background: var(--st-bg);
+  color: var(--st-ink);
+  font-size: 12.5px;
+  font-weight: 560;
+}
+.st-explorer-check:hover:not(:disabled) { border-color: var(--st-accent); color: var(--st-accent); background: var(--st-bg); }
+.st-explorer-check:disabled { border-color: var(--st-line); color: var(--st-muted-soft); }
+
+/* ---------- Открытый файл ---------- */
+
+.st-file { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
+
+.st-file-head {
+  display: flex;
+  height: 54px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--st-line);
+}
+.st-file-title { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
+.st-file-title strong { overflow: hidden; font-size: 14.5px; font-weight: 640; text-overflow: ellipsis; white-space: nowrap; }
+.st-file-title span { flex: 0 0 auto; color: var(--st-muted-soft); font-size: 12px; }
+
+.st-file-tools { display: flex; margin-left: auto; align-items: center; gap: 6px; }
+.st-file-tools button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--st-line);
+  border-radius: 8px;
+  background: var(--st-bg);
+  color: var(--st-ink);
+  font-size: 13px;
+}
+.st-file-tools button:hover:not(:disabled) { border-color: var(--st-muted-soft); }
+.st-file-tools button:disabled { color: var(--st-muted-soft); }
+.st-file-tools svg { width: 16px; height: 16px; stroke-width: 2.25; }
+.st-file-primary { border-color: var(--st-accent); background: var(--st-accent); color: #ffffff; }
+.st-file-primary:hover:not(:disabled) { border-color: #1550bd; background: #1550bd; }
+
+.st-file-body { min-height: 0; padding: 0 20px 28px; overflow: auto; }
+.st-file-editor {
+  width: 100%;
+  min-height: calc(100svh - 200px);
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--st-line);
+  border-radius: 12px;
+  background: var(--st-bg);
+  color: var(--st-ink);
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  resize: vertical;
+  outline: none;
+}
+.st-file-editor:focus { border-color: var(--st-accent); box-shadow: var(--st-ring); }
+.st-file-error { margin: 24px 0; color: var(--st-muted); font-size: 13.5px; }
+
+/* ---------- Панель проверки ---------- */
+
+.st-verdict { padding: 12px 20px 14px; border-bottom: 1px solid var(--st-line); background: var(--st-panel); }
+.st-verdict-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.st-verdict-head svg { width: 18px; height: 18px; flex: 0 0 auto; stroke-width: 2; }
+.st-verdict-head button { margin-left: auto; border: 0; background: transparent; color: var(--st-muted); }
+.st-verdict-head button svg { width: 15px; height: 15px; stroke-width: 2.4; }
+.st-verdict.is-ok .st-verdict-head { color: var(--st-ok); }
+.st-verdict.is-warning .st-verdict-head { color: #92400e; }
+.st-verdict.is-error .st-verdict-head { color: var(--st-danger); }
+
+.st-verdict ul { display: grid; gap: 5px; margin: 9px 0 0; padding: 0; list-style: none; }
+.st-verdict li { position: relative; display: grid; gap: 1px; padding-left: 16px; font-size: 12.5px; line-height: 1.5; }
+/* Метка состояния кружком: значок на каждую строку превратил бы список в рябь. */
+.st-verdict li::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.st-verdict li.is-ok::before { background: var(--st-ok); }
+.st-verdict li.is-warning::before { background: #d97706; }
+.st-verdict li.is-error::before { background: var(--st-danger); }
+.st-verdict li em { color: var(--st-muted-soft); font-size: 12px; font-style: normal; }

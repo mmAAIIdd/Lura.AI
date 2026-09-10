@@ -11,6 +11,11 @@ const immutableAssets = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  /* Значок разработки Next по умолчанию висит в левом нижнем углу — ровно
+     поверх нижней панели проводника, и её кнопки перестают нажиматься. В
+     сборке значка нет, поэтому дефект виден только на машине разработчика,
+     что делает его особенно неприятным: «у меня не работает кнопка». */
+  devIndicators: { position: "bottom-right" },
   /* Docker packaging, not a build mode every target wants: the Dockerfile is
      the only thing that consumes .next/standalone, and it asks for this
      explicitly. Left on unconditionally it made `npm run build` fail outright

@@ -80,6 +80,13 @@ export function emptyThread(title: string): StudioThread {
 export const saveArtifact = (id: string, markdown: string) => studioStore().saveArtifact(id, markdown);
 export const readArtifact = (id: string) => studioStore().readArtifact(id);
 
+/* ---------- Проект ---------- */
+
+export const listNodes = () => studioStore().listNodes();
+export const saveNode = (...args: Parameters<StudioStore["saveNode"]>) => studioStore().saveNode(...args);
+export const readNodeContent = (id: string) => studioStore().readNodeContent(id);
+export const deleteNode = (id: string) => studioStore().deleteNode(id);
+
 export { newId };
 export { StorageUnavailableError } from "@/lib/studio/store/contract";
 export type { ChunkHit, StudioStore } from "@/lib/studio/store/contract";
@@ -87,6 +94,7 @@ export type {
   DocumentKind,
   StudioDocument,
   StudioMessage,
+  StudioNode,
   StudioThread,
   ThreadSummary,
   ToolTrace,
