@@ -40,10 +40,10 @@ export function StudioReport({ message, streaming }: Props) {
             <span className="st-idle-badge">
               <LuraLogo className="st-idle-mark" />
             </span>
-            <h1>Ответ появится здесь</h1>
+            <h1>Здесь откроются файлы и отчёты</h1>
             <p>
-              Спросите Луру в панели рядом. Полный разбор продукта с отчётом запускает
-              команда <code>{REPORT_COMMAND}</code>.
+              Выберите файл в проводнике слева или спросите Луру в чате справа — короткий ответ
+              придёт прямо туда. Полный разбор с отчётом запускает команда <code>{REPORT_COMMAND}</code>.
             </p>
           </div>
         </div>
@@ -92,5 +92,9 @@ function Working({ tools }: { tools: ToolTrace[] }) {
 function describe(trace: ToolTrace): string {
   if (trace.name === "web_search") return `Ищет: ${trace.argument}`;
   if (trace.name === "fetch_url") return `Читает: ${trace.argument}`;
+  if (trace.name === "list_project") return "Смотрит проект";
+  if (trace.name === "read_project_file") return `Открывает файл: ${trace.argument}`;
+  if (trace.name === "create_folder") return `Создаёт папку: ${trace.argument}`;
+  if (trace.name === "write_project_file") return `Записывает файл: ${trace.argument}`;
   return `Документы: ${trace.argument}`;
 }

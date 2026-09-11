@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  CheckIcon,
   ChevronIcon,
   CloseIcon,
-  NewIcon,
+  FilePlusIcon,
+  FolderPlusIcon,
   PencilIcon,
   TrashIcon,
+  UploadIcon,
 } from "@/components/studio/icons";
 import { cx } from "@/lib/studio/cx";
+import { MAX_FILE_CHARS, PROJECT_ROOT, nodePath } from "@/lib/studio/project";
 import type { StudioNode } from "@/lib/studio/types";
 
 /**
@@ -20,6 +22,11 @@ import type { StudioNode } from "@/lib/studio/types";
  * по папкам, переименовывать, удалять. Пока результат жил одним «последним
  * ответом», всё, кроме свежего разбора, было недоступно.
  *
+ * Действий наверху три, и все подписаны словами: значок «папка с плюсом» в
+ * шестнадцать пикселей не объясняет, что он делает, пока на него не нажмёшь.
+ * Переименование и удаление живут в самой строке — там, где понятно, к чему
+ * они относятся.
+ *
  * Дерево собирается из плоского списка на каждый рендер: узлов здесь десятки, а
  * не тысячи, и держать вторую, вложенную копию состояния — значит держать её
  * в согласии с первой при каждом переименовании.
@@ -28,25 +35,34 @@ import type { StudioNode } from "@/lib/studio/types";
 type Draft = { parentId: string | null; kind: StudioNode["kind"] } | null;
 
 type Props = {
+  /** Файл активной вкладки: выделяется в дереве. */
   openedId: string | null;
   onOpen: (node: StudioNode) => void;
-  onCheck: (node: StudioNode) => void;
-  onClosed: (id: string) => void;
-  /** Счётчик обновлений снаружи: агент дописал отчёт — дерево перечитывается. */
+  /** Свежее дерево после каждой загрузки: вкладки сверяют с ним имена и удалённые файлы. */
+  onNodes: (nodes: StudioNode[]) => void;
+  /** Счётчик обновлений снаружи: агент записал файл — дерево перечитывается. */
   revision: number;
 };
 
-const ROOT = "LURA_PROJECT";
+/* Файл уходит в теле JSON-запроса, а тело на бессерверной площадке ограничено
+   примерно 4.5 МБ. */
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+const UPLOAD_ACCEPT = ".txt,.md,.markdown,.csv,.tsv,.json,.log,.yaml,.yml,.xml,.html,.htm";
 
-export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: Props) {
+export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
   const [nodes, setNodes] = useState<StudioNode[]>([]);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [rootOpen, setRootOpen] = useState(true);
+  /* Выделение отдельно от открытого файла: папку можно выбрать, но не открыть,
+     и именно выбранная папка решает, куда лягут новые элементы. */
+  const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const input = useRef<HTMLInputElement | null>(null);
+  const picker = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/studio/files", { cache: "no-store" });
@@ -55,9 +71,11 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
       setError(body?.error ?? "Проект не открылся.");
       return;
     }
-    setNodes(body?.nodes ?? []);
+    const list = body?.nodes ?? [];
+    setNodes(list);
     setLoaded(true);
-  }, []);
+    onNodes(list);
+  }, [onNodes]);
 
   useEffect(() => {
     void load();
@@ -66,6 +84,11 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
   useEffect(() => {
     if (draft || renaming) input.current?.focus();
   }, [draft, renaming]);
+
+  /* Переключили вкладку — в дереве выделяется её файл, как в редакторе кода. */
+  useEffect(() => {
+    if (openedId) setSelected(openedId);
+  }, [openedId]);
 
   const children = useMemo(() => {
     const map = new Map<string | null, StudioNode[]>();
@@ -87,32 +110,64 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
   /* Куда попадёт новый элемент: в выделенную папку, иначе рядом с выделенным
      файлом, иначе в корень. Это ровно то, чего ждёшь от проводника. */
   const target = useMemo(() => {
-    const opened = nodes.find((node) => node.id === openedId);
-    if (!opened) return null;
-    return opened.kind === "folder" ? opened.id : opened.parentId;
-  }, [nodes, openedId]);
+    const node = nodes.find((item) => item.id === selected);
+    if (!node) return null;
+    return node.kind === "folder" ? node.id : node.parentId;
+  }, [nodes, selected]);
 
-  async function send(url: string, init: RequestInit): Promise<boolean> {
+  const targetLabel = useMemo(() => {
+    const folder = nodes.find((item) => item.id === target);
+    return folder ? nodePath(nodes, folder) : PROJECT_ROOT;
+  }, [nodes, target]);
+
+  /** Раскрыть папку со всеми предками, чтобы новый элемент было видно. */
+  function reveal(folderId: string | null) {
+    setRootOpen(true);
+    if (!folderId) return;
+    setOpen((current) => {
+      const next = new Set(current);
+      let id: string | null = folderId;
+      for (let guard = 0; id && guard <= nodes.length; guard += 1) {
+        const at: string = id;
+        next.add(at);
+        id = nodes.find((node) => node.id === at)?.parentId ?? null;
+      }
+      return next;
+    });
+  }
+
+  async function send(url: string, init: RequestInit): Promise<{ node?: StudioNode } | null> {
     setError(null);
     const response = await fetch(url, init);
+    const body = (await response.json().catch(() => null)) as { node?: StudioNode; error?: string } | null;
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
       setError(body?.error ?? "Не получилось.");
-      return false;
+      return null;
     }
     await load();
-    return true;
+    return body ?? {};
+  }
+
+  function startDraft(kind: StudioNode["kind"]) {
+    setRenaming(null);
+    setDraft({ parentId: target, kind });
+    reveal(target);
   }
 
   async function create(name: string) {
     if (!draft) return;
-    const ok = await send("/api/studio/files", {
+    const current = draft;
+    setDraft(null);
+    const result = await send("/api/studio/files", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parentId: draft.parentId, kind: draft.kind, name }),
+      body: JSON.stringify({ parentId: current.parentId, kind: current.kind, name }),
     });
-    if (ok && draft.parentId) setOpen((current) => new Set(current).add(draft.parentId as string));
-    setDraft(null);
+    const node = result?.node;
+    if (!node) return;
+    setSelected(node.id);
+    /* Новый файл сразу открывается: создают его затем, чтобы писать. */
+    if (node.kind === "file") onOpen(node);
   }
 
   async function rename(id: string, name: string) {
@@ -130,7 +185,64 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
       ? `Удалить папку «${node.name}» и всё внутри (${inside})?`
       : `Удалить «${node.name}»?`;
     if (!window.confirm(question)) return;
-    if (await send(`/api/studio/files/${node.id}`, { method: "DELETE" })) onClosed(node.id);
+    await send(`/api/studio/files/${node.id}`, { method: "DELETE" });
+  }
+
+  /**
+   * Файлы с компьютера ложатся в проект как есть, текстом.
+   *
+   * Проблемные файлы не останавливают остальные: из пяти выбранных четыре
+   * должны загрузиться, а про пятый — сказано, что с ним не так.
+   */
+  async function upload(files: File[]) {
+    if (!files.length) return;
+    const parentId = target;
+    setError(null);
+    setUploading(true);
+
+    const problems: string[] = [];
+    let last: StudioNode | null = null;
+    try {
+      for (const file of files) {
+        if (file.size > MAX_UPLOAD_BYTES) {
+          problems.push(`«${file.name}» больше 3 МБ`);
+          continue;
+        }
+        const content = await file.text().catch(() => null);
+        /* Нулевой символ в «тексте» бывает только у двоичного файла: картинка,
+           прочитанная как строка, превращается в экран мусора. */
+        if (content === null || content.includes(String.fromCharCode(0))) {
+          problems.push(`«${file.name}» — не текстовый файл`);
+          continue;
+        }
+        if (content.length > MAX_FILE_CHARS) {
+          problems.push(`«${file.name}» длиннее ${MAX_FILE_CHARS.toLocaleString("ru-RU")} символов`);
+          continue;
+        }
+
+        const response = await fetch("/api/studio/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parentId, kind: "file", name: file.name, content }),
+        });
+        const body = (await response.json().catch(() => null)) as { node?: StudioNode; error?: string } | null;
+        if (!response.ok || !body?.node) {
+          problems.push(`«${file.name}»: ${body?.error ?? "не загрузился"}`);
+          continue;
+        }
+        last = body.node;
+      }
+    } finally {
+      setUploading(false);
+    }
+
+    reveal(parentId);
+    await load();
+    if (last) {
+      setSelected(last.id);
+      onOpen(last);
+    }
+    if (problems.length) setError(`Не загрузились: ${problems.join("; ")}.`);
   }
 
   function toggle(id: string) {
@@ -142,6 +254,23 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
     });
   }
 
+  function draftRow(parentId: string | null, depth: number) {
+    if (!draft || draft.parentId !== parentId) return null;
+    return (
+      <li>
+        <div className="st-tree-row" style={{ paddingLeft: 8 + depth * 14 }}>
+          <NameInput
+            inputRef={input}
+            initial=""
+            placeholder={draft.kind === "folder" ? "Имя папки" : "Имя файла"}
+            onCancel={() => setDraft(null)}
+            onCommit={create}
+          />
+        </div>
+      </li>
+    );
+  }
+
   function renderRow(node: StudioNode, depth: number) {
     const folder = node.kind === "folder";
     const expanded = open.has(node.id);
@@ -150,13 +279,17 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
     return (
       <li key={node.id}>
         <div
-          className={cx("st-tree-row", openedId === node.id && "is-on")}
+          className={cx("st-tree-row", selected === node.id && "is-on")}
           style={{ paddingLeft: 8 + depth * 14 }}
         >
           <button
             type="button"
             className="st-tree-main"
-            onClick={() => (folder ? toggle(node.id) : onOpen(node))}
+            onClick={() => {
+              setSelected(node.id);
+              if (folder) toggle(node.id);
+              else onOpen(node);
+            }}
             title={folder ? node.name : `${node.name} — ${node.chars ?? 0} символов`}
           >
             <span className={cx("st-tree-caret", folder && expanded && "is-open")} aria-hidden="true">
@@ -187,26 +320,13 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
         {folder && expanded ? (
           <ul className="st-tree-list">
             {(children.get(node.id) ?? []).map((child) => renderRow(child, depth + 1))}
-            {draft && draft.parentId === node.id ? (
-              <li>
-                <div className="st-tree-row" style={{ paddingLeft: 8 + (depth + 1) * 14 }}>
-                  <NameInput
-                    inputRef={input}
-                    initial=""
-                    placeholder={draft.kind === "folder" ? "Имя папки" : "Имя файла"}
-                    onCancel={() => setDraft(null)}
-                    onCommit={create}
-                  />
-                </div>
-              </li>
-            ) : null}
+            {draftRow(node.id, depth + 1)}
           </ul>
         ) : null}
       </li>
     );
   }
 
-  const opened = nodes.find((node) => node.id === openedId) ?? null;
   const files = nodes.filter((node) => node.kind === "file").length;
 
   return (
@@ -216,36 +336,67 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
         <span className="st-explorer-count">{files ? `${files} ${plural(files)}` : ""}</span>
       </div>
 
+      <div className="st-explorer-actions">
+        <button type="button" className="st-explorer-action" onClick={() => startDraft("folder")}>
+          <FolderPlusIcon />
+          <span>Добавить папку</span>
+        </button>
+        <button type="button" className="st-explorer-action" onClick={() => startDraft("file")}>
+          <FilePlusIcon />
+          <span>Добавить файл</span>
+        </button>
+        <button
+          type="button"
+          className="st-explorer-action"
+          onClick={() => picker.current?.click()}
+          disabled={uploading}
+          title={`Текстовые файлы: ${UPLOAD_ACCEPT.replaceAll(",", " ")}`}
+        >
+          <UploadIcon />
+          <span>{uploading ? "Загружаем…" : "Загрузить с компьютера"}</span>
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          hidden
+          accept={UPLOAD_ACCEPT}
+          onChange={(event) => {
+            const chosen = Array.from(event.target.files ?? []);
+            event.target.value = "";
+            void upload(chosen);
+          }}
+        />
+        <p className="st-explorer-target" title={targetLabel}>
+          Куда: <b>{targetLabel}</b>
+        </p>
+      </div>
+
       <div className="st-explorer-body">
-        <button type="button" className="st-tree-root" onClick={() => setRootOpen((value) => !value)}>
+        <button
+          type="button"
+          className="st-tree-root"
+          onClick={() => {
+            setSelected(null);
+            setRootOpen((value) => !value);
+          }}
+        >
           <span className={cx("st-tree-caret", rootOpen && "is-open")} aria-hidden="true">
             <ChevronIcon />
           </span>
-          {ROOT}
+          {PROJECT_ROOT}
         </button>
 
         {rootOpen ? (
           <ul className="st-tree-list">
             {(children.get(null) ?? []).map((node) => renderRow(node, 1))}
-            {draft && draft.parentId === null ? (
-              <li>
-                <div className="st-tree-row" style={{ paddingLeft: 22 }}>
-                  <NameInput
-                    inputRef={input}
-                    initial=""
-                    placeholder={draft.kind === "folder" ? "Имя папки" : "Имя файла"}
-                    onCancel={() => setDraft(null)}
-                    onCommit={create}
-                  />
-                </div>
-              </li>
-            ) : null}
+            {draftRow(null, 1)}
           </ul>
         ) : null}
 
         {loaded && !nodes.length && !draft ? (
           <p className="st-explorer-empty">
-            Пусто. Создайте папку или файл — Лура будет складывать сюда готовые отчёты.
+            Пусто. Добавьте папку или файл — сюда же Лура складывает отчёты и файлы, которые вы попросите её записать.
           </p>
         ) : null}
       </div>
@@ -258,48 +409,6 @@ export function FileExplorer({ openedId, onOpen, onCheck, onClosed, revision }: 
           </button>
         </p>
       ) : null}
-
-      <div className="st-explorer-bar">
-        <button
-          type="button"
-          onClick={() => setDraft({ parentId: target, kind: "file" })}
-          title="Новый файл"
-          aria-label="Новый файл"
-        >
-          <NewIcon />
-        </button>
-        <button
-          type="button"
-          onClick={() => setDraft({ parentId: target, kind: "folder" })}
-          title="Новая папка"
-          aria-label="Новая папка"
-        >
-          <FolderPlusIcon />
-        </button>
-        <button type="button" onClick={() => void load()} title="Обновить" aria-label="Обновить">
-          <RefreshIcon />
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(new Set())}
-          disabled={!open.size}
-          title="Свернуть все папки"
-          aria-label="Свернуть все папки"
-        >
-          <CollapseIcon />
-        </button>
-        <span className="st-explorer-gap" />
-        <button
-          type="button"
-          className="st-explorer-check"
-          onClick={() => opened && opened.kind === "file" && onCheck(opened)}
-          disabled={!opened || opened.kind !== "file"}
-          title={opened?.kind === "file" ? `Проверить «${opened.name}»` : "Откройте файл, чтобы проверить"}
-        >
-          <CheckIcon />
-          <span>Проверка</span>
-        </button>
-      </div>
     </aside>
   );
 }
@@ -361,35 +470,5 @@ function NameInput({
       onBlur={() => (value.trim() && value.trim() !== initial ? onCommit(value.trim()) : onCancel())}
       aria-label={placeholder ?? "Имя"}
     />
-  );
-}
-
-function FolderPlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v3" />
-      <path d="M16 17h6" />
-      <path d="M19 14v6" />
-    </svg>
-  );
-}
-
-function RefreshIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-      <path d="M21 4v5h-5" />
-    </svg>
-  );
-}
-
-function CollapseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 9h6V3" />
-      <path d="M20 15h-6v6" />
-      <path d="M14 10 21 3" />
-      <path d="M3 21l7-7" />
-    </svg>
   );
 }

@@ -3,20 +3,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FileExplorer } from "@/components/studio/file-explorer";
+import { FileTabs } from "@/components/studio/file-tabs";
 import { FileView } from "@/components/studio/file-view";
 import { PanelIcon } from "@/components/studio/icons";
 import { cx } from "@/lib/studio/cx";
 import { StudioContext } from "@/components/studio/studio-context";
 import { StudioPanel, type ComposerAttachment } from "@/components/studio/studio-panel";
 import { StudioReport } from "@/components/studio/studio-report";
-import type { LuraModel, StudioNode, StudioThread, ToolTrace, WorkspaceState } from "@/lib/studio/types";
+import type {
+  LuraModel,
+  RunMode,
+  StudioMessage,
+  StudioNode,
+  StudioThread,
+  ToolTrace,
+  WorkspaceState,
+} from "@/lib/studio/types";
 
 /**
- * Рабочее пространство: рельса, окно вывода и диалог.
+ * Рабочее пространство: проводник, вкладки файлов с окном вывода и диалог.
  *
- * Состояние живёт здесь: все три панели — представления одного разговора, а
- * поток событий от агента один. Разводить его по компонентам значило бы
- * синхронизировать их между собой на каждом токене.
+ * Состояние живёт здесь: все панели — представления одного разговора и одного
+ * проекта, а поток событий от агента один. Разводить его по компонентам значило
+ * бы синхронизировать их между собой на каждом токене.
  */
 
 const EMPTY: WorkspaceState = {
@@ -25,13 +34,25 @@ const EMPTY: WorkspaceState = {
   runtime: { ready: true, models: ["lura-pro", "lura-fast"], search: null, storage: "", ephemeral: false },
 };
 
-type Live = { text: string; tools: ToolTrace[] };
+/* Режим становится известен первым событием потока; до него — null, и ответ
+   ещё некуда показывать. */
+type Live = { text: string; tools: ToolTrace[]; mode: RunMode | null };
 type View = "report" | "context" | "file";
 
 /* Границы панели. Уже нижней в ней не помещаются ни названия разборов, ни
    поле ввода; шире верхней — центр становится колонкой текста в пол-экрана. */
 const PANEL = { min: 340, max: 760, initial: 440 };
 const WIDTH_KEY = "lura.studio.panel";
+
+/* После этих инструментов дерево перечитывается сразу, а не по окончании
+   ответа: файл появляется в проводнике, пока агент ещё пишет. */
+const PROJECT_WRITES = new Set(["create_folder", "write_project_file"]);
+
+/**
+ * Разговорный ответ живёт в чате, в окно вывода попадает только разбор.
+ * У старых сообщений режима нет — они показываются в центре, как и раньше.
+ */
+const isReport = (message: StudioMessage) => message.role === "agent" && message.mode !== "chat";
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -42,11 +63,13 @@ export function StudioScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>("report");
-  /* Проводник: открытый файл, счётчик перечитывания дерева и счётчик запусков
-     проверки. Счётчики, а не флаги: повторное нажатие обязано сработать. */
-  const [openedFile, setOpenedFile] = useState<StudioNode | null>(null);
+  /* Вкладки открытых файлов, активная вкладка и те, где есть несохранённая
+     правка. Счётчик дерева — счётчик, а не флаг: повторная запись агента в тот
+     же файл обязана перечитать проводник снова. */
+  const [tabs, setTabs] = useState<StudioNode[]>([]);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [treeRevision, setTreeRevision] = useState(0);
-  const [checkToken, setCheckToken] = useState(0);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [model, setModel] = useState<LuraModel>("lura-pro");
   const [panelOpen, setPanelOpen] = useState(true);
@@ -71,11 +94,12 @@ export function StudioScreen() {
     if (!response.ok) return;
     const body = (await response.json()) as { thread: StudioThread };
     setThread(body.thread);
-    setView("report");
     setError(null);
-    /* Открывая разбор, показываем его последний ответ: он и есть результат. */
-    const last = [...body.thread.messages].reverse().find((message) => message.role === "agent");
+    /* Открывая разбор, показываем его последний отчёт: он и есть результат.
+       Если в треде только разговор, открытый файл остаётся на месте. */
+    const last = [...body.thread.messages].reverse().find(isReport);
     setSelectedReport(last?.id ?? null);
+    if (last) setView("report");
   }, []);
 
   useEffect(() => {
@@ -109,7 +133,7 @@ export function StudioScreen() {
   }, [panelWidth]);
 
   const messages = thread?.messages ?? [];
-  const reports = messages.filter((message) => message.role === "agent");
+  const reports = messages.filter(isReport);
   const shown =
     reports.find((message) => message.id === selectedReport) ?? reports[reports.length - 1] ?? null;
   useEffect(() => {
@@ -129,6 +153,62 @@ export function StudioScreen() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  /* ---------- Вкладки ---------- */
+
+  const openFile = useCallback((node: StudioNode) => {
+    setTabs((current) => (current.some((tab) => tab.id === node.id) ? current : [...current, node]));
+    setActiveTab(node.id);
+    setView("file");
+  }, []);
+
+  /* Дерево перечитано: вкладки берут из него новые имена и отметки времени, а
+     вкладки удалённых файлов закрываются — иначе открытым остался бы файл,
+     которого уже нет. */
+  const syncTabs = useCallback((nodes: StudioNode[]) => {
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    setTabs((current) => {
+      const next = current.flatMap((tab) => byId.get(tab.id) ?? []);
+      const same =
+        next.length === current.length &&
+        next.every((node, index) => node.name === current[index].name && node.updatedAt === current[index].updatedAt);
+      return same ? current : next;
+    });
+  }, []);
+
+  const markDirty = useCallback((id: string, value: boolean) => {
+    setDirty((current) => {
+      if (current.has(id) === value) return current;
+      const next = new Set(current);
+      if (value) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  function closeTab(id: string) {
+    const index = tabs.findIndex((tab) => tab.id === id);
+    if (index < 0) return;
+    if (dirty.has(id) && !window.confirm(`В «${tabs[index].name}» есть несохранённые правки. Закрыть без сохранения?`)) {
+      return;
+    }
+    const rest = tabs.filter((tab) => tab.id !== id);
+    setTabs(rest);
+    markDirty(id, false);
+    if (activeTab !== id) return;
+    /* Как в редакторе кода: активной становится соседняя справа, если её нет — слева. */
+    const neighbour = rest[index] ?? rest[index - 1] ?? null;
+    setActiveTab(neighbour?.id ?? null);
+    if (!neighbour && view === "file") setView("report");
+  }
+
+  /* Активная вкладка исчезла при сверке с деревом — файл удалили. */
+  useEffect(() => {
+    if (!activeTab || tabs.some((tab) => tab.id === activeTab)) return;
+    const fallback = tabs[tabs.length - 1] ?? null;
+    setActiveTab(fallback?.id ?? null);
+    if (!fallback) setView((current) => (current === "file" ? "report" : current));
+  }, [tabs, activeTab]);
 
   /**
    * Перетаскивание границы.
@@ -213,8 +293,7 @@ export function StudioScreen() {
   async function run(prompt: string, attachments: ComposerAttachment[]) {
     setBusy(true);
     setError(null);
-    setView("report");
-    setLive({ text: "", tools: [] });
+    setLive({ text: "", tools: [], mode: null });
 
     /* Свой запрос показывается сразу: иначе между нажатием и первым событием
        экран выглядит так, будто ничего не приняли. */
@@ -273,13 +352,18 @@ export function StudioScreen() {
 
           const event = JSON.parse(frame.slice(5).trim()) as
             | { type: "model"; model: LuraModel }
-            | { type: "mode"; mode: "chat" | "report" }
+            | { type: "mode"; mode: RunMode }
             | { type: "text"; text: string }
             | { type: "tool"; phase: "start" | "done"; trace: ToolTrace }
             | { type: "done"; thread: StudioThread }
             | { type: "error"; message: string };
 
-          if (event.type === "text") {
+          if (event.type === "mode") {
+            setLive((current) => (current ? { ...current, mode: event.mode } : current));
+            /* Разбор занимает окно вывода с первой секунды. Разговор его не
+               трогает: открытый файл остаётся на месте, ответ придёт в чат. */
+            if (event.mode === "report") setView("report");
+          } else if (event.type === "text") {
             setLive((current) => (current ? { ...current, text: current.text + event.text } : current));
           } else if (event.type === "tool") {
             setLive((current) => {
@@ -295,10 +379,17 @@ export function StudioScreen() {
               }
               return { ...current, tools };
             });
+            if (event.phase === "done" && event.trace.ok && PROJECT_WRITES.has(event.trace.name)) {
+              setTreeRevision((value) => value + 1);
+            }
           } else if (event.type === "done") {
             setThread(event.thread);
-            const last = [...event.thread.messages].reverse().find((message) => message.role === "agent");
-            setSelectedReport(last?.id ?? null);
+            const answer = event.thread.messages[event.thread.messages.length - 1];
+            if (answer && isReport(answer)) {
+              setSelectedReport(answer.id);
+              /* Разбор лёг файлом в «Отчёты» — проводник должен его показать. */
+              setTreeRevision((value) => value + 1);
+            }
             setLive(null);
             void refresh();
           } else if (event.type === "error") {
@@ -318,6 +409,8 @@ export function StudioScreen() {
     }
   }
 
+  const fileOnScreen = view === "file" && activeTab !== null;
+
   return (
     <div
       ref={shell}
@@ -330,57 +423,60 @@ export function StudioScreen() {
       }
     >
       <FileExplorer
-          openedId={openedFile?.id ?? null}
-          revision={treeRevision}
-          onOpen={(node) => {
-            setOpenedFile(node);
-            setView("file");
-          }}
-          onCheck={(node) => {
-            setOpenedFile(node);
-            setView("file");
-            setCheckToken((value) => value + 1);
-          }}
-          onClosed={(id) => {
-            if (openedFile?.id !== id) return;
-            setOpenedFile(null);
-            setView("report");
-          }}
+        openedId={fileOnScreen ? activeTab : null}
+        revision={treeRevision}
+        onOpen={openFile}
+        onNodes={syncTabs}
       />
 
       <main className="st-main">
-        {view === "file" && openedFile ? (
-          <FileView
-            node={openedFile}
-            checkToken={checkToken}
-            onSaved={() => setTreeRevision((value) => value + 1)}
-            onClose={() => {
-              setOpenedFile(null);
-              setView("report");
+        {tabs.length ? (
+          <FileTabs
+            tabs={tabs}
+            active={fileOnScreen ? activeTab : null}
+            dirty={dirty}
+            onSelect={(id) => {
+              setActiveTab(id);
+              setView("file");
             }}
+            onClose={closeTab}
           />
-        ) : view === "context" ? (
-          <StudioContext
-            documents={workspace.documents}
-            busy={busy}
-            onUpload={upload}
-            onUploadUrl={uploadUrl}
-            onMakeBusiness={async (id) => {
-              await fetch(`/api/studio/documents/${id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ kind: "business" }),
-              });
-              await refresh();
-            }}
-            onDelete={async (id) => {
-              await fetch(`/api/studio/documents/${id}`, { method: "DELETE" });
-              await refresh();
-            }}
-          />
-        ) : (
-          <StudioReport message={shown} streaming={live} />
-        )}
+        ) : null}
+
+        <div className="st-main-body">
+          {tabs.map((tab) => (
+            <FileView
+              key={tab.id}
+              node={tab}
+              hidden={!fileOnScreen || tab.id !== activeTab}
+              onDirty={markDirty}
+              onSaved={() => setTreeRevision((value) => value + 1)}
+            />
+          ))}
+
+          {view === "context" ? (
+            <StudioContext
+              documents={workspace.documents}
+              busy={busy}
+              onUpload={upload}
+              onUploadUrl={uploadUrl}
+              onMakeBusiness={async (id) => {
+                await fetch(`/api/studio/documents/${id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ kind: "business" }),
+                });
+                await refresh();
+              }}
+              onDelete={async (id) => {
+                await fetch(`/api/studio/documents/${id}`, { method: "DELETE" });
+                await refresh();
+              }}
+            />
+          ) : fileOnScreen ? null : (
+            <StudioReport message={shown} streaming={live?.mode === "report" ? live : null} />
+          )}
+        </div>
       </main>
 
       <div

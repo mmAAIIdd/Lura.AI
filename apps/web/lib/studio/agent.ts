@@ -203,7 +203,12 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
         yield {
           type: "tool",
           phase: "start",
-          trace: { name: call.name, argument: String(call.args.query ?? call.args.url ?? ""), summary: "", ok: true },
+          trace: {
+            name: call.name,
+            argument: String(call.args.query ?? call.args.url ?? call.args.path ?? call.args.folder ?? ""),
+            summary: "",
+            ok: true,
+          },
         };
         const toolStarted = Date.now();
         const outcome = await runTool(call.name, call.args);

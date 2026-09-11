@@ -20,17 +20,18 @@ import {
   TrashIcon,
 } from "@/components/studio/icons";
 import { ModelPicker } from "@/components/studio/model-picker";
+import { ReportMarkdown } from "@/components/studio/report-markdown";
 import { REPORT_COMMAND } from "@/lib/studio/command";
 import { cx } from "@/lib/studio/cx";
-import type { LuraModel, StudioMessage, ThreadSummary, ToolTrace } from "@/lib/studio/types";
+import type { LuraModel, RunMode, StudioMessage, ThreadSummary, ToolTrace } from "@/lib/studio/types";
 
 /**
- * Боковая панель — единственная в интерфейсе.
+ * Панель диалога.
  *
- * Раньше управление было слева, а разговор справа, и глаз ходил через весь
- * экран между двумя узкими колонками. Теперь всё, кроме самого ответа, живёт
- * здесь: шапка с действиями, две вкладки — переписка и список разборов — и
- * поле ввода внизу. Центр остался тем, ради чего всё и затевалось: ответом.
+ * Здесь всё, что относится к разговору: шапка с действиями, две вкладки —
+ * переписка и список разборов — и поле ввода внизу. Разговорный ответ живёт
+ * здесь целиком; в центр уходит только полный разбор, а остальное место там
+ * отдано файлам проекта.
  */
 
 export type ComposerAttachment = { name: string; mimeType: string; data: string; text?: string };
@@ -44,6 +45,10 @@ const TOOL_LABEL: Record<string, string> = {
   web_search: "Поиск",
   fetch_url: "Читает",
   search_documents: "Документы",
+  list_project: "Проект",
+  read_project_file: "Открывает файл",
+  create_folder: "Создаёт папку",
+  write_project_file: "Записывает файл",
 };
 
 type Tab = "chat" | "threads";
@@ -121,7 +126,7 @@ type Props = {
   view: "report" | "context";
   model: LuraModel;
   models: LuraModel[];
-  live: { text: string; tools: ToolTrace[] } | null;
+  live: { text: string; tools: ToolTrace[]; mode: RunMode | null } | null;
   error: string | null;
   busy: boolean;
   ready: boolean;
@@ -393,7 +398,13 @@ export function StudioPanel({
           {live ? (
             <article className="st-reply">
               <ToolList tools={live.tools} running />
-              {live.text ? <div className="st-reply-text is-live">{plainPreview(live.text)}</div> : null}
+              {!live.text ? null : live.mode === "chat" ? (
+                <div className="st-reply-body">
+                  <ReportMarkdown source={live.text} />
+                </div>
+              ) : (
+                <div className="st-reply-text is-live">{plainPreview(live.text)}</div>
+              )}
             </article>
           ) : null}
 
@@ -594,6 +605,19 @@ function Reply({
   active: boolean;
   onSelect: () => void;
 }) {
+  /* Разговорный ответ в окно вывода не уходит, поэтому здесь он целиком и с
+     разметкой: список или маленькая таблица без неё превращаются в кашу. */
+  if (message.mode === "chat") {
+    return (
+      <article className="st-reply">
+        <ToolList tools={message.tools ?? []} />
+        <div className="st-reply-body">
+          <ReportMarkdown source={message.text} />
+        </div>
+      </article>
+    );
+  }
+
   const line = answerLine(message.text);
   return (
     <article className="st-reply">

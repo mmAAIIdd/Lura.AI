@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { checkName, nameTaken } from "@/lib/studio/project";
+import { MAX_FILE_CHARS, checkName, nameTaken } from "@/lib/studio/project";
 import { StorageUnavailableError, listNodes, newId, saveNode, type StudioNode } from "@/lib/studio/store";
 
 export const runtime = "nodejs";
@@ -33,6 +33,11 @@ export async function POST(request: Request) {
   const checked = checkName(body.name);
   if ("error" in checked) return NextResponse.json({ error: checked.error }, { status: 400 });
 
+  const content = kind === "folder" ? null : String(body.content ?? "");
+  if (content !== null && content.length > MAX_FILE_CHARS) {
+    return NextResponse.json({ error: `Файл длиннее ${MAX_FILE_CHARS.toLocaleString("ru-RU")} символов.` }, { status: 413 });
+  }
+
   try {
     const nodes = await listNodes();
     const parentId = body.parentId ?? null;
@@ -53,9 +58,9 @@ export async function POST(request: Request) {
       name: checked.name,
       createdAt: now,
       updatedAt: now,
-      chars: kind === "folder" ? null : 0,
+      chars: content === null ? null : content.length,
     };
-    const saved = await saveNode(node, kind === "folder" ? null : String(body.content ?? ""));
+    const saved = await saveNode(node, content);
     return NextResponse.json({ node: saved }, { status: 201 });
   } catch (error) {
     if (error instanceof StorageUnavailableError) return NextResponse.json({ error: error.message }, { status: 503 });

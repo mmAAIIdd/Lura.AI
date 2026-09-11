@@ -6,6 +6,7 @@ import { SearchUnavailableError, searchWeb } from "@/lib/studio/search";
 import { analyzeTable, countGroups, parseTable, type GroupInput } from "@/lib/studio/table";
 import { htmlToText, looksTextual, truncate } from "@/lib/studio/text";
 import { listDocuments, readDocumentText, type StudioDocument, type ToolTrace } from "@/lib/studio/store";
+import { createProjectFolder, listProject, readProjectFile, writeProjectFile } from "@/lib/studio/project-write";
 
 /**
  * Инструменты агента: поиск в интернете, чтение страницы, работа с
@@ -135,6 +136,63 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
         date_column: { type: "string", description: "Столбец с датой, если автоопределение ошиблось." },
       },
       required: ["document", "groups"],
+    },
+  },
+  {
+    name: "list_project",
+    description:
+      "Показать проект пользователя — папки и файлы из проводника слева — списком путей вида «Отчёты/Сводка». " +
+      "Вызывай перед записью, чтобы не завести второй файл рядом с уже существующим и попасть в нужную папку.",
+    parameters: {
+      type: "object",
+      properties: {
+        folder: { type: "string", description: "Путь папки, если нужна только она. По умолчанию весь проект." },
+      },
+    },
+  },
+  {
+    name: "read_project_file",
+    description:
+      "Прочитать файл проекта по пути. Длинный файл выдаётся частями — запрашивай следующую, пока не дойдёшь до конца. " +
+      "Это файлы проводника (отчёты, заметки пользователя), а не загруженные документы: те читает read_document.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Путь файла от корня проекта, например «Отчёты/2026-09-11 — Релиз 5.2»." },
+        part: { type: "integer", description: "Номер части, начиная с 1. По умолчанию 1." },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "create_folder",
+    description: "Создать папку в проекте. Недостающие папки по пути создаются тоже; существующая папка не трогается.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Путь папки от корня проекта, например «Релизы/5.2»." },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "write_project_file",
+    description:
+      "Записать текст в файл проекта. Файла нет — он создаётся вместе с папками по пути. Есть — перезаписывается " +
+      "целиком (mode=overwrite) или дописывается в конец (mode=append). Пиши Markdown. Файл сразу виден пользователю " +
+      "в проводнике, поэтому в ответе назови путь, куда записал.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Путь файла от корня проекта, например «Заметки/Идеи по онбордингу»." },
+        content: { type: "string", description: "Текст для записи." },
+        mode: {
+          type: "string",
+          enum: ["overwrite", "append"],
+          description: "overwrite — заменить содержимое, append — дописать в конец. По умолчанию overwrite.",
+        },
+      },
+      required: ["path", "content"],
     },
   },
 ];
@@ -392,6 +450,96 @@ async function runCountGroups(args: Record<string, unknown>): Promise<ToolOutcom
   };
 }
 
+/* ---------- Проект ---------- */
+
+/* Ошибка файловой операции — ожидаемый ответ, а не сбой: модель ошиблась путём
+   и должна увидеть, как правильно, а не общий текст исключения. */
+function projectFailure(name: string, argument: string, error: string): ToolOutcome {
+  return { response: { error }, trace: { name, argument, summary: error.slice(0, 160), ok: false } };
+}
+
+async function runListProject(args: Record<string, unknown>): Promise<ToolOutcome> {
+  const folder = String(args.folder ?? "");
+  const result = await listProject(folder);
+  if ("error" in result) return projectFailure("list_project", folder, result.error);
+
+  const files = result.entries.filter((entry) => entry.kind === "file").length;
+  return {
+    response: {
+      entries: result.entries,
+      note: result.entries.length ? "Пути указаны от корня проекта." : "Проект пуст.",
+    },
+    trace: {
+      name: "list_project",
+      argument: folder,
+      summary: `${result.entries.length - files} папок, ${files} файлов`,
+      ok: true,
+    },
+  };
+}
+
+async function runReadProjectFile(args: Record<string, unknown>): Promise<ToolOutcome> {
+  const path = String(args.path ?? "");
+  const result = await readProjectFile(path);
+  if ("error" in result) return projectFailure("read_project_file", path, result.error);
+
+  const size = LIMITS.documentReadChars;
+  const parts = Math.max(1, Math.ceil(result.content.length / size));
+  const part = Math.min(Math.max(Number(args.part) || 1, 1), parts);
+  const slice = result.content.slice((part - 1) * size, part * size);
+
+  return {
+    response: {
+      path: result.path,
+      part,
+      parts,
+      characters: result.content.length,
+      content: slice,
+      note: part < parts ? `Это часть ${part} из ${parts}.` : "Файл прочитан целиком.",
+    },
+    trace: {
+      name: "read_project_file",
+      argument: path,
+      summary: `${result.path} — ${result.content.length.toLocaleString("ru-RU")} символов`,
+      ok: true,
+    },
+  };
+}
+
+async function runCreateFolder(args: Record<string, unknown>): Promise<ToolOutcome> {
+  const path = String(args.path ?? "");
+  const result = await createProjectFolder(path);
+  if ("error" in result) return projectFailure("create_folder", path, result.error);
+
+  return {
+    response: { path: result.path, created: result.created },
+    trace: {
+      name: "create_folder",
+      argument: path,
+      summary: result.created.length ? `создано: ${result.created.join(", ")}` : "папка уже была",
+      ok: true,
+    },
+  };
+}
+
+async function runWriteProjectFile(args: Record<string, unknown>): Promise<ToolOutcome> {
+  const path = String(args.path ?? "");
+  const mode = args.mode === "append" ? "append" : "overwrite";
+  const result = await writeProjectFile(path, String(args.content ?? ""), mode);
+  if ("error" in result) return projectFailure("write_project_file", path, result.error);
+
+  const action = !result.existed ? "создан" : mode === "append" ? "дописан" : "перезаписан";
+  return {
+    response: { path: result.path, action, characters: result.node.chars },
+    trace: {
+      name: "write_project_file",
+      argument: path,
+      summary: `${result.path} — ${action}`,
+      ok: true,
+    },
+  };
+}
+
 const RUNNERS: Record<string, (args: Record<string, unknown>) => Promise<ToolOutcome>> = {
   web_search: runWebSearch,
   fetch_url: runFetchUrl,
@@ -399,6 +547,10 @@ const RUNNERS: Record<string, (args: Record<string, unknown>) => Promise<ToolOut
   read_document: runReadDocument,
   analyze_table: runAnalyzeTable,
   count_groups: runCountGroups,
+  list_project: runListProject,
+  read_project_file: runReadProjectFile,
+  create_folder: runCreateFolder,
+  write_project_file: runWriteProjectFile,
 };
 
 /**
@@ -423,7 +575,7 @@ export async function runTool(name: string, args: Record<string, unknown>): Prom
       response: { error: message },
       trace: {
         name,
-        argument: String(args.query ?? args.url ?? ""),
+        argument: String(args.query ?? args.url ?? args.path ?? ""),
         summary: message.slice(0, 160),
         ok: false,
       },

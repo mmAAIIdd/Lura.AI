@@ -57,3 +57,55 @@ export function nameTaken(nodes: StudioNode[], parentId: string | null, name: st
       node.id !== exceptId && node.parentId === parentId && node.name.toLowerCase() === name.toLowerCase(),
   );
 }
+
+/* Предел на один файл проекта. Файл целиком ходит в браузер и обратно при
+   каждом сохранении, а дописывание без предела растит его без конца. */
+export const MAX_FILE_CHARS = 400_000;
+
+/** Имя корня в проводнике. Агент видит его в интерфейсе и может начать с него путь. */
+export const PROJECT_ROOT = "LURA_PROJECT";
+
+/**
+ * Путь из строки: «Отчёты/Релиз 5.2/Сводка».
+ *
+ * Слеш в имени узла запрещён, поэтому разделитель однозначен. Корень, пустые
+ * сегменты и обратные слеши прощаются: модель пишет путь по-разному, и отказ
+ * из-за «/Отчёты/» вместо «Отчёты» — не ошибка, которую стоит ей возвращать.
+ */
+export function splitPath(raw: unknown): string[] {
+  const segments = String(raw ?? "")
+    .split(/[\\/]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments[0] === PROJECT_ROOT ? segments.slice(1) : segments;
+}
+
+export function findChild(nodes: StudioNode[], parentId: string | null, name: string): StudioNode | undefined {
+  const wanted = name.toLowerCase();
+  return nodes.find((node) => node.parentId === parentId && node.name.toLowerCase() === wanted);
+}
+
+/** Узел по пути или null, если хоть одного звена нет. */
+export function findByPath(nodes: StudioNode[], segments: string[]): StudioNode | null {
+  let parentId: string | null = null;
+  let found: StudioNode | null = null;
+  for (const segment of segments) {
+    found = findChild(nodes, parentId, segment) ?? null;
+    if (!found) return null;
+    parentId = found.id;
+  }
+  return found;
+}
+
+/** Путь узла от корня. Обход ограничен длиной списка: битая ссылка на родителя не зациклит его. */
+export function nodePath(nodes: StudioNode[], node: StudioNode): string {
+  const names = [node.name];
+  let parentId = node.parentId;
+  for (let guard = 0; parentId && guard < nodes.length; guard += 1) {
+    const parent = nodes.find((item) => item.id === parentId);
+    if (!parent) break;
+    names.unshift(parent.name);
+    parentId = parent.parentId;
+  }
+  return names.join("/");
+}

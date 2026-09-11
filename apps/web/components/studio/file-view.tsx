@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CheckIcon, CloseIcon, PencilIcon } from "@/components/studio/icons";
 import { ReportMarkdown } from "@/components/studio/report-markdown";
@@ -9,34 +9,47 @@ import { checkReport, checkVerdict, type Finding } from "@/lib/studio/review";
 import type { StudioNode } from "@/lib/studio/types";
 
 /**
- * Открытый файл проекта.
+ * Открытый файл проекта — содержимое одной вкладки.
  *
  * Два состояния: чтение — отчёт как он выглядит, правка — исходный текст. Одно
  * не подменяет другое: разметку удобно читать отрисованной, а исправлять
  * только в исходнике, и попытка совместить даёт редактор, в котором неудобно
  * ни то ни другое.
+ *
+ * Вкладка остаётся смонтированной, пока открыта, и только прячется: иначе
+ * переход на соседнюю вкладку стирал бы несохранённую правку.
  */
 
 type Props = {
   node: StudioNode;
-  /** Ненулевое значение — снаружи попросили проверку (кнопка в проводнике). */
-  checkToken: number;
+  hidden: boolean;
   onSaved: () => void;
-  onClose: () => void;
+  /** Есть ли несохранённая правка: вкладка показывает точку и переспрашивает перед закрытием. */
+  onDirty: (id: string, dirty: boolean) => void;
 };
 
-export function FileView({ node, checkToken, onSaved, onClose }: Props) {
+export function FileView({ node, hidden, onSaved, onDirty }: Props) {
   const [content, setContent] = useState("");
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "saving" | "failed">("loading");
+  const [problem, setProblem] = useState<string | null>(null);
   const [findings, setFindings] = useState<Finding[] | null>(null);
 
+  const dirty = editing && draft !== content;
+  const dirtyRef = useRef(false);
+
   useEffect(() => {
+    dirtyRef.current = dirty;
+    onDirty(node.id, dirty);
+  }, [dirty, node.id, onDirty]);
+
+  /* Файл перечитывается и тогда, когда сменилась его отметка времени: агент мог
+     переписать его, пока вкладка открыта. Несохранённая правка важнее — поверх
+     неё ничего не перечитывается, иначе набранное пропало бы без предупреждения. */
+  useEffect(() => {
+    if (dirtyRef.current) return;
     let alive = true;
-    setState("loading");
-    setEditing(false);
-    setFindings(null);
     (async () => {
       const response = await fetch(`/api/studio/files/${node.id}`, { cache: "no-store" });
       const body = (await response.json().catch(() => null)) as { content?: string } | null;
@@ -52,24 +65,22 @@ export function FileView({ node, checkToken, onSaved, onClose }: Props) {
     return () => {
       alive = false;
     };
-  }, [node.id]);
-
-  /* Проверка запускается кнопкой из проводника, поэтому приходит счётчиком:
-     повторное нажатие на тот же файл обязано перезапустить её, а не молчать. */
-  useEffect(() => {
-    if (!checkToken || state !== "ready") return;
-    setFindings(checkReport(editing ? draft : content));
-  }, [checkToken, state, content, draft, editing]);
+  }, [node.id, node.updatedAt]);
 
   async function save() {
+    if (state !== "ready") return;
     setState("saving");
+    setProblem(null);
     const response = await fetch(`/api/studio/files/${node.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: draft }),
     });
     if (!response.ok) {
-      setState("failed");
+      /* Правка остаётся в редакторе: сорвавшееся сохранение не должно стоить набранного текста. */
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      setProblem(body?.error ?? "Не сохранилось. Попробуйте ещё раз.");
+      setState("ready");
       return;
     }
     setContent(draft);
@@ -81,14 +92,27 @@ export function FileView({ node, checkToken, onSaved, onClose }: Props) {
   const verdict = findings ? checkVerdict(findings) : null;
 
   return (
-    <div className="st-file">
+    <div className="st-file" hidden={hidden}>
       <header className="st-file-head">
         <div className="st-file-title">
           <strong>{node.name}</strong>
-          <span>{state === "loading" ? "открывается…" : `${content.length.toLocaleString("ru-RU")} символов`}</span>
+          <span>
+            {state === "loading"
+              ? "открывается…"
+              : problem ?? `${(editing ? draft : content).length.toLocaleString("ru-RU")} символов`}
+          </span>
         </div>
 
         <div className="st-file-tools">
+          <button
+            type="button"
+            onClick={() => setFindings(checkReport(editing ? draft : content))}
+            disabled={state === "loading" || state === "failed"}
+            title="Проверить отчёт: разделы, пометки, источники"
+          >
+            <CheckIcon />
+            <span>Проверить</span>
+          </button>
           {editing ? (
             <>
               <button type="button" className="st-file-primary" onClick={save} disabled={state === "saving"}>
@@ -99,6 +123,7 @@ export function FileView({ node, checkToken, onSaved, onClose }: Props) {
                 onClick={() => {
                   setDraft(content);
                   setEditing(false);
+                  setProblem(null);
                 }}
               >
                 Отменить
@@ -110,9 +135,6 @@ export function FileView({ node, checkToken, onSaved, onClose }: Props) {
               <span>Править</span>
             </button>
           )}
-          <button type="button" onClick={onClose} title="Закрыть файл" aria-label="Закрыть файл">
-            <CloseIcon />
-          </button>
         </div>
       </header>
 
@@ -138,22 +160,29 @@ export function FileView({ node, checkToken, onSaved, onClose }: Props) {
 
       <div className="st-file-body">
         {state === "failed" ? (
-          <p className="st-file-error">Файл не открылся. Обновите проводник и попробуйте снова.</p>
+          <p className="st-file-error">Файл не открылся. Закройте вкладку и откройте его из проводника снова.</p>
         ) : editing ? (
           <textarea
             className="st-file-editor"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              /* Ctrl+S сохраняет, а не открывает браузерное «Сохранить страницу». */
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+                event.preventDefault();
+                void save();
+              }
+            }}
             spellCheck={false}
-            aria-label="Исходный текст отчёта"
+            aria-label={`Текст файла «${node.name}»`}
           />
         ) : content.trim() ? (
           <div className="st-report-body">
             <ReportMarkdown source={content} />
           </div>
-        ) : (
-          <p className="st-file-error">Файл пуст. Нажмите «Править» и напишите текст, либо попросите Луру записать сюда разбор.</p>
-        )}
+        ) : state === "ready" ? (
+          <p className="st-file-error">Файл пуст. Нажмите «Править» и напишите текст, либо попросите Луру записать сюда что-нибудь.</p>
+        ) : null}
       </div>
     </div>
   );

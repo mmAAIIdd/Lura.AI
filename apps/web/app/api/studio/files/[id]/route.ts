@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { checkName, descendants, nameTaken } from "@/lib/studio/project";
+import { MAX_FILE_CHARS, checkName, descendants, nameTaken } from "@/lib/studio/project";
 import { StorageUnavailableError, deleteNode, listNodes, readNodeContent, saveNode } from "@/lib/studio/store";
 import type { StudioNode } from "@/lib/studio/store";
 
@@ -36,6 +36,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   if (!body || typeof body.content !== "string") return fail("Ожидается поле content.", 400);
   /* Сужение типа не переживает границу замыкания, поэтому текст достаётся до неё. */
   const content = body.content;
+  if (content.length > MAX_FILE_CHARS) return fail(`Файл длиннее ${MAX_FILE_CHARS.toLocaleString("ru-RU")} символов.`, 413);
 
   return withStore(async () => {
     const node = (await listNodes()).find((item) => item.id === id);

@@ -174,6 +174,48 @@ export function CheckIcon(props: Props) {
   );
 }
 
+export function FileIcon(props: Props) {
+  return (
+    <Glyph {...props}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </Glyph>
+  );
+}
+
+export function FilePlusIcon(props: Props) {
+  return (
+    <Glyph {...props}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M9 15h6" />
+      <path d="M12 18v-6" />
+    </Glyph>
+  );
+}
+
+export function FolderPlusIcon(props: Props) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 10v6" />
+      <path d="M9 13h6" />
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    </Glyph>
+  );
+}
+
+export function UploadIcon(props: Props) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 3v12" />
+      <path d="m17 8-5-5-5 5" />
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    </Glyph>
+  );
+}
+
 /** Знак боковой панели: рамка окна с отчёркнутой правой колонкой. */
 export function PanelIcon(props: Props) {
   return (

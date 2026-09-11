@@ -78,7 +78,9 @@
 
 /* ---------- Центр: ответ ---------- */
 
-.st-main { min-width: 0; min-height: 0; overflow: hidden; background: var(--st-bg); }
+/* Центр — полоса вкладок и под ней то, что открыто: файл, разбор или кастомизация. */
+.st-main { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; background: var(--st-bg); }
+.st-main-body { flex: 1 1 auto; min-height: 0; }
 
 .st-report { display: grid; grid-template-rows: minmax(0, 1fr); height: 100%; min-height: 0; }
 .st-report-body { min-height: 0; overflow-y: auto; padding: 44px 40px 80px; }
@@ -344,6 +346,24 @@ body.st-resizing iframe { pointer-events: none; }
   font-size: 12.5px;
 }
 .st-reply-text:hover .st-reply-more { color: var(--st-accent); }
+
+/* Разговорный ответ целиком живёт в чате, поэтому здесь та же разметка, что в
+   окне вывода, только под узкую колонку: мельче заголовки, таблица не выходит
+   в поля — полей у колонки нет. */
+.st-reply-body { padding: 2px 4px 2px 11px; }
+.st-reply-body .report { font-size: 14.5px; line-height: 1.6; }
+.st-reply-body .report > :last-child { margin-bottom: 0; }
+.st-reply-body .report h2 { margin: 18px 0 8px; font-size: 18px; }
+.st-reply-body .report h3 { margin: 14px 0 6px; font-size: 15px; }
+.st-reply-body .report p { margin: 0 0 10px; }
+.st-reply-body .report ul,
+.st-reply-body .report ol { margin: 0 0 10px; padding-left: 18px; }
+.st-reply-body .report li { margin-bottom: 4px; }
+.st-reply-body .report pre { padding: 10px 12px; font-size: 12.5px; }
+.st-reply-body .report-table { width: 100%; margin: 0 0 12px; }
+.st-reply-body .report-table table { font-size: 13px; }
+.st-reply-body .report-table th,
+.st-reply-body .report-table td { padding: 7px 9px; }
 
 /* ---------- Поиск и разборы ---------- */
 
