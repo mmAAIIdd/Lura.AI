@@ -19,8 +19,8 @@ import type { LuraModel } from "@/lib/studio/types";
  */
 
 const ABOUT: Record<LuraModel, string> = {
-  "lura-pro": "Точнее, отвечает дольше",
-  "lura-fast": "Быстрые ответы",
+  "lura-pro": "Точнее, отвечает дольше — для разбора",
+  "lura-fast": "Быстрее и проще — для коротких вопросов",
 };
 
 type Props = {
@@ -82,7 +82,8 @@ export function ModelPicker({ value, options, disabled, onChange }: Props) {
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Модель: ${value}`}
+        aria-label={`Модель ${value}: ${ABOUT[value] ?? ""}`}
+        data-tip={ABOUT[value]}
         onClick={() => (open ? close(false) : show())}
         onKeyDown={(event) => {
           if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -91,6 +92,9 @@ export function ModelPicker({ value, options, disabled, onChange }: Props) {
           }
         }}
       >
+        {/* Одно имя модели ничего не говорит о последствиях выбора, поэтому
+            рядом подпись, а разница — в подсказке и в самом списке. */}
+        <span className="st-picker-label">Модель</span>
         <span>{value}</span>
         <ChevronUpIcon />
       </button>

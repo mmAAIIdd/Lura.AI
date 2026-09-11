@@ -1,37 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
-import { LuraLogo } from "@/components/lura-logo";
-import {
-  ChatIcon,
-  ClipIcon,
-  CloseIcon,
-  CommandIcon,
-  ExitIcon,
-  HistoryIcon,
-  LayersIcon,
-  NewIcon,
-  PanelIcon,
-  PencilIcon,
-  SearchIcon,
-  SendIcon,
-  StopIcon,
-  TrashIcon,
-} from "@/components/studio/icons";
+import { ClipIcon, CloseIcon, ExitIcon, NewIcon, PanelIcon, SendIcon, StopIcon } from "@/components/studio/icons";
 import { ModelPicker } from "@/components/studio/model-picker";
 import { ReportMarkdown } from "@/components/studio/report-markdown";
-import { REPORT_COMMAND } from "@/lib/studio/command";
+import { parsePrompt } from "@/lib/studio/command";
 import { cx } from "@/lib/studio/cx";
-import type { LuraModel, RunMode, StudioMessage, ThreadSummary, ToolTrace } from "@/lib/studio/types";
+import { materialsWord } from "@/lib/studio/materials";
+import type { LuraModel, RunMode, StudioDocument, StudioMessage, ToolTrace } from "@/lib/studio/types";
 
 /**
- * Панель диалога.
+ * Обсуждение — правая колонка.
  *
- * Здесь всё, что относится к разговору: шапка с действиями, две вкладки —
- * переписка и список разборов — и поле ввода внизу. Разговорный ответ живёт
- * здесь целиком; в центр уходит только полный разбор, а остальное место там
- * отдано файлам проекта.
+ * Здесь разговор с Lura: переписка и поле ввода. Короткий ответ живёт здесь
+ * целиком, отчёт открывается в центре. Список разборов переехал в левую
+ * колонку, к материалам и файлам проекта: он про проект, а не про разговор.
+ *
+ * Над полем ввода всегда видно, на каких материалах Lura будет отвечать.
+ * Пустое дерево файлов ничего не говорит о её доступе к данным, а переоценить
+ * этот доступ — значит поверить ответу, у которого нет опоры.
  */
 
 export type ComposerAttachment = { name: string; mimeType: string; data: string; text?: string };
@@ -42,68 +30,32 @@ export type ComposerAttachment = { name: string; mimeType: string; data: string;
 const MAX_ATTACHMENTS_TOTAL_BYTES = 3 * 1024 * 1024;
 
 const TOOL_LABEL: Record<string, string> = {
-  web_search: "Поиск",
-  fetch_url: "Читает",
-  search_documents: "Документы",
-  list_project: "Проект",
+  web_search: "Ищет в интернете",
+  fetch_url: "Читает страницу",
+  search_documents: "Ищет в материалах",
+  read_document: "Читает материал",
+  analyze_table: "Считает показатели",
+  count_groups: "Считает темы",
+  list_project: "Смотрит файлы проекта",
   read_project_file: "Открывает файл",
   create_folder: "Создаёт папку",
   write_project_file: "Записывает файл",
 };
 
-type Tab = "chat" | "threads";
-
-/**
- * Ответ для строки диалога.
- *
- * В переписке идёт разговор, а не документ: решётки заголовков, звёздочки
- * жирного и палки таблиц читаются здесь как мусор. Размеченный ответ целиком
- * лежит в центре — сюда попадает то же самое человеческим текстом.
- */
-function plainPreview(markdown: string): string {
-  return markdown
+/** Отчёт в переписке — одной-двумя фразами без разметки: целиком он лежит в центре. */
+function brief(markdown: string, limit = 180): string {
+  const flat = markdown
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/^\s{0,3}\|.*$/gm, "")
     .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s{0,3}>\s?/gm, "")
-    .replace(/^\s{0,3}[-*_]{3,}\s*$/gm, "")
-    .replace(/^\s{0,3}[-*+]\s+/gm, "• ")
-    .replace(/^\s{0,3}\d+\.\s+/gm, "")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\*\*([\s\S]*?)\*\*/g, "$1")
-    .replace(/__([\s\S]*?)__/g, "$1")
-    .replace(/\*([^*\n]+)\*/g, "$1")
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{2,}/g, "\n")
+    .replace(/[*_`>]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
-}
-
-/* До этого предела ответ помещается в колонку целиком и остаётся разговором.
-   Дальше он становится документом, и в переписке ему место только описанием. */
-const SHORT_ANSWER_CHARS = 420;
-
-/** Первые предложения целиком, без обрыва посреди слова. */
-function firstSentences(text: string, limit = 190): string {
-  const flat = text.replace(/\s+/g, " ").trim();
   if (flat.length <= limit) return flat;
-  const window = flat.slice(0, limit + 70);
+  const window = flat.slice(0, limit + 60);
   const stop = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
-  if (stop > 70) return window.slice(0, stop + 1);
-  return `${flat.slice(0, limit).trimEnd()}…`;
-}
-
-/**
- * Что показать в переписке вместо ответа.
- *
- * Короткий ответ и есть реплика — он идёт целиком. Длинный уходит в окно
- * вывода, а здесь остаётся описание: о чём он. Обрезанный на восьмой строке
- * отчёт не описывает ничего — он просто обрывается на середине таблицы.
- */
-function answerLine(markdown: string): { text: string; whole: boolean } {
-  const plain = plainPreview(markdown);
-  if (plain.length <= SHORT_ANSWER_CHARS) return { text: plain, whole: true };
-  return { text: firstSentences(plain), whole: false };
+  return stop > 60 ? window.slice(0, stop + 1) : `${flat.slice(0, limit).trimEnd()}…`;
 }
 
 function attachmentSize(attachment: ComposerAttachment): number {
@@ -121,16 +73,18 @@ function readAsBase64(file: File): Promise<string> {
 
 type Props = {
   messages: StudioMessage[];
-  threads: ThreadSummary[];
-  activeThread: string | null;
-  view: "report" | "context";
-  model: LuraModel;
-  models: LuraModel[];
   live: { text: string; tools: ToolTrace[]; mode: RunMode | null } | null;
   error: string | null;
   busy: boolean;
   ready: boolean;
   ephemeral: boolean;
+  loaded: boolean;
+  /** Материалы, отмеченные для ответа. */
+  sources: StudioDocument[];
+  /** Сколько материалов загружено всего. */
+  materials: number;
+  model: LuraModel;
+  models: LuraModel[];
   selectedReport: string | null;
   onModel: (model: LuraModel) => void;
   onSelectReport: (messageId: string) => void;
@@ -138,24 +92,20 @@ type Props = {
   onStop: () => void;
   onCollapse: () => void;
   onNewThread: () => void;
-  onOpenThread: (id: string) => void;
-  onOpenContext: () => void;
-  onRenameThread: (id: string, title: string) => void;
-  onDeleteThread: (id: string) => void;
 };
 
 export function StudioPanel({
   messages,
-  threads,
-  activeThread,
-  view,
-  model,
-  models,
   live,
   error,
   busy,
   ready,
   ephemeral,
+  loaded,
+  sources,
+  materials,
+  model,
+  models,
   selectedReport,
   onModel,
   onSelectReport,
@@ -163,22 +113,15 @@ export function StudioPanel({
   onStop,
   onCollapse,
   onNewThread,
-  onOpenThread,
-  onOpenContext,
-  onRenameThread,
-  onDeleteThread,
 }: Props) {
-  const [tab, setTab] = useState<Tab>("chat");
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [showSources, setShowSources] = useState(false);
+  const sourcesId = useId();
 
   const fileInput = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
-  const searchField = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const stream = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -191,7 +134,7 @@ export function StudioPanel({
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     return () => node.removeEventListener("scroll", onScroll);
-  }, [tab]);
+  }, []);
 
   useEffect(() => {
     stick.current = true;
@@ -199,20 +142,7 @@ export function StudioPanel({
 
   useEffect(() => {
     if (stick.current) bottom.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, live?.tools.length, live?.text, tab]);
-
-  /* Ctrl+K ведёт к поиску по разборам — вместе с переключением на вкладку,
-     где он живёт: иначе сочетание срабатывало бы вхолостую. */
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
-      event.preventDefault();
-      setTab("threads");
-      window.setTimeout(() => searchField.current?.focus(), 0);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [messages.length, live?.tools.length, live?.text]);
 
   async function attach(files: File[]) {
     setProblem(null);
@@ -222,8 +152,8 @@ export function StudioPanel({
     for (const file of files.slice(0, 6)) {
       if (file.size > budget) {
         setProblem(
-          `«${file.name}» не помещается: на вложения к одному запросу отведено 3 МБ. ` +
-            "Большой файл загрузите в «Кастомизации».",
+          `«${file.name}» не помещается: на вложения к одному сообщению отведено 3 МБ. ` +
+            "Большой файл загрузите в «Материалы» слева.",
         );
         continue;
       }
@@ -244,139 +174,88 @@ export function StudioPanel({
   function send() {
     const prompt = value.trim();
     if (!prompt || busy) return;
-    /* Отправка всегда возвращает к переписке: ответ придёт туда, и оставлять
-       пользователя на списке разборов значило бы спрятать от него результат. */
-    setTab("chat");
     onSend(prompt, attachments);
     setValue("");
     setAttachments([]);
     if (area.current) area.current.style.height = "auto";
   }
 
-  /* Команда разбора набирается кнопкой, а не с клавиатуры: запомнить
-     «/lur manager-dev start» нельзя, а промахнуться в нём — легко, и тогда
-     запрос молча уходит обычным вопросом. Повторное нажатие снимает её. */
-  const commandOn = value.trimStart().toLowerCase().startsWith(REPORT_COMMAND);
-
-  function toggleCommand() {
-    setValue((current) => {
-      const trimmed = current.trimStart();
-      if (trimmed.toLowerCase().startsWith(REPORT_COMMAND)) {
-        return trimmed.slice(REPORT_COMMAND.length).trimStart();
-      }
-      return `${REPORT_COMMAND} ${trimmed}`;
-    });
-    area.current?.focus();
-  }
-
-  function commitRename(id: string) {
-    const title = draft.trim();
-    setEditing(null);
-    if (title) onRenameThread(id, title);
-  }
-
-  const needle = query.trim().toLowerCase();
-  const visibleThreads = needle
-    ? threads.filter((thread) => thread.title.toLowerCase().includes(needle))
-    : threads;
+  /* Приветствие говорит о фактическом контексте, а не о приложении вообще:
+     «источники не выбраны» — только когда список материалов уже получен. */
+  const greeting = !loaded
+    ? null
+    : !materials
+      ? "Добавьте материалы и укажите, что хотите выяснить. Сейчас источники для анализа не выбраны."
+      : !sources.length
+        ? "Отметьте материалы слева и укажите, что хотите выяснить. Сейчас источники для анализа не выбраны."
+        : "Спросите о выбранных материалах — короткий ответ придёт сюда. Разбор с отчётом запускается кнопкой «Начать разбор» в центре.";
 
   return (
-    <section className="st-panel" aria-label="Панель Lura">
+    <section className="st-panel" aria-label="Обсуждение">
       <header className="st-panel-head">
-        <div className="st-brand">
-          <LuraLogo className="st-brand-logo" />
-          <span>Lura</span>
-        </div>
+        <h2 className="st-panel-title">Обсуждение</h2>
 
         <div className="st-panel-actions">
           <button
+            type="button"
             className="st-act"
-            onClick={() => {
-              setTab("chat");
-              onNewThread();
-            }}
+            onClick={onNewThread}
             disabled={busy}
-            title="Новый разбор — Ctrl N"
-            aria-label="Новый разбор"
+            aria-label="Новый разговор"
+            data-tip="Новый разговор · Ctrl N"
           >
             <NewIcon />
           </button>
           <button
-            className={cx("st-act", view === "context" && "is-on")}
-            onClick={onOpenContext}
-            title="Кастомизация: документы о бизнесе и источники"
-            aria-label="Кастомизация"
-            aria-pressed={view === "context"}
-          >
-            <LayersIcon />
-          </button>
-          <button
+            type="button"
             className="st-act"
             onClick={async () => {
               await fetch("/auth/signout", { method: "POST" });
               window.location.href = "/register";
             }}
-            title="Выйти"
-            aria-label="Выйти"
+            aria-label="Выйти из аккаунта"
+            data-tip="Выйти из аккаунта"
           >
             <ExitIcon />
           </button>
 
           <span className="st-act-split" aria-hidden="true" />
 
-          <button className="st-act" onClick={onCollapse} title="Скрыть панель — Ctrl J" aria-label="Скрыть панель">
+          <button
+            type="button"
+            className="st-act"
+            onClick={onCollapse}
+            aria-label="Скрыть обсуждение"
+            data-tip="Скрыть · Ctrl J"
+          >
             <PanelIcon />
           </button>
         </div>
       </header>
 
-      <div className="st-tabs" role="tablist" aria-label="Содержимое панели">
-        <button
-          role="tab"
-          aria-selected={tab === "chat"}
-          className={cx("st-tab", tab === "chat" && "is-on")}
-          onClick={() => setTab("chat")}
-        >
-          <ChatIcon />
-          <span>Чат</span>
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "threads"}
-          className={cx("st-tab", tab === "threads" && "is-on")}
-          onClick={() => setTab("threads")}
-        >
-          <HistoryIcon />
-          <span>Разборы</span>
-          {threads.length ? <em>{threads.length}</em> : null}
-        </button>
-      </div>
+      <div className="st-stream" ref={stream}>
+        {!ready ? (
+          <p className="st-warn">
+            Ответы не запускаются: у рабочего пространства не настроена модель. Нужен GEMINI_API_KEY в переменных
+            окружения.
+          </p>
+        ) : null}
+        {ephemeral ? (
+          <p className="st-warn">
+            Хранилище временное: материалы и разборы пропадут при перезапуске. Задайте STUDIO_DATABASE_URL, чтобы они
+            сохранялись.
+          </p>
+        ) : null}
 
-      {tab === "chat" ? (
-        <div className="st-stream" ref={stream}>
-          {!ready ? (
-            <p className="st-warn">
-              Не задан ключ модели — ответы не запускаются. Добавьте GEMINI_API_KEY в переменные окружения
-              и пересоберите приложение.
-            </p>
-          ) : null}
-          {ephemeral ? (
-            <p className="st-warn">
-              Хранилище временное: документы и разборы пропадут при перезапуске. Задайте STUDIO_DATABASE_URL,
-              чтобы они сохранялись.
-            </p>
-          ) : null}
+        {!messages.length && !live && greeting ? <p className="st-hint">{greeting}</p> : null}
 
-          {!messages.length && !live ? (
-            <p className="st-hint">
-              Спросите о чём угодно. Полный разбор с отчётом запускает команда «{REPORT_COMMAND}».
-            </p>
-          ) : null}
-
-          {messages.map((message) =>
-            message.role === "user" ? (
+        {messages.map((message) => {
+          if (message.role === "user") {
+            const parsed = parsePrompt(message.text);
+            return (
               <article className="st-said" key={message.id}>
-                <p>{message.text}</p>
+                {parsed.mode === "report" ? <span className="st-said-kind">Разбор</span> : null}
+                <p>{parsed.text || parsed.raw}</p>
                 {message.attachments?.length ? (
                   <div className="st-said-files">
                     {message.attachments.map((file) => (
@@ -385,119 +264,87 @@ export function StudioPanel({
                   </div>
                 ) : null}
               </article>
-            ) : (
-              <Reply
-                key={message.id}
-                message={message}
-                active={selectedReport === message.id}
-                onSelect={() => onSelectReport(message.id)}
-              />
-            ),
-          )}
-
-          {live ? (
-            <article className="st-reply">
-              <ToolList tools={live.tools} running />
-              {!live.text ? null : live.mode === "chat" ? (
-                <div className="st-reply-body">
-                  <ReportMarkdown source={live.text} />
-                </div>
-              ) : (
-                <div className="st-reply-text is-live">{plainPreview(live.text)}</div>
-              )}
-            </article>
-          ) : null}
-
-          {error ? <p className="st-error">{error}</p> : null}
-
-          <div ref={bottom} />
-        </div>
-      ) : (
-        <div className="st-stream">
-          <div className="st-search">
-            <SearchIcon />
-            <input
-              ref={searchField}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Поиск по разборам"
-              aria-label="Поиск по разборам"
+            );
+          }
+          return (
+            <Reply
+              key={message.id}
+              message={message}
+              active={selectedReport === message.id}
+              onSelect={() => onSelectReport(message.id)}
             />
-            {query ? (
-              <button onClick={() => setQuery("")} aria-label="Очистить">
-                <CloseIcon />
-              </button>
-            ) : null}
-          </div>
+          );
+        })}
 
-          {visibleThreads.length ? (
-            <div className="st-thread-list">
-              {visibleThreads.map((thread) =>
-                editing === thread.id ? (
-                  <input
-                    key={thread.id}
-                    className="st-thread-edit"
-                    value={draft}
-                    autoFocus
-                    onChange={(event) => setDraft(event.target.value)}
-                    onBlur={() => commitRename(thread.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") commitRename(thread.id);
-                      if (event.key === "Escape") setEditing(null);
-                    }}
-                  />
-                ) : (
-                  <div
-                    key={thread.id}
-                    className={cx("st-thread", activeThread === thread.id && "is-active")}
-                  >
-                    <button
-                      className="st-thread-open"
-                      onClick={() => {
-                        onOpenThread(thread.id);
-                        setTab("chat");
-                      }}
-                      disabled={busy}
-                      title={thread.title}
-                    >
-                      <span className="st-thread-title">{thread.title}</span>
-                      <span className="st-thread-meta">{thread.messages} сообщений</span>
-                    </button>
-
-                    <span className="st-thread-tools">
-                      <button
-                        onClick={() => {
-                          setEditing(thread.id);
-                          setDraft(thread.title);
-                        }}
-                        title="Переименовать"
-                        aria-label="Переименовать"
-                      >
-                        <PencilIcon />
-                      </button>
-                      <button onClick={() => onDeleteThread(thread.id)} title="Удалить" aria-label="Удалить">
-                        <TrashIcon />
-                      </button>
-                    </span>
+        {live ? (
+          <article className="st-reply">
+            {live.mode === "report" ? (
+              <p className="st-reply-state" role="status">
+                Разбор выполняется — ход работы виден в центре.
+              </p>
+            ) : (
+              <>
+                <ToolList tools={live.tools} running />
+                {live.text ? (
+                  <div className="st-reply-body">
+                    <ReportMarkdown source={live.text} />
                   </div>
-                ),
-              )}
-            </div>
-          ) : (
-            <p className="st-hint">{needle ? "Ничего не нашлось." : "Разборов пока нет."}</p>
-          )}
-        </div>
-      )}
+                ) : null}
+              </>
+            )}
+          </article>
+        ) : null}
+
+        {error ? (
+          <p className="st-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <div ref={bottom} />
+      </div>
 
       <div className="st-composer">
-        {problem ? <p className="st-composer-problem">{problem}</p> : null}
+        {problem ? (
+          <p className="st-composer-problem" role="alert">
+            {problem}
+          </p>
+        ) : null}
 
-        <div className={cx("st-composer-box", commandOn && "is-command")}>
+        <div className="st-context-bar">
+          <button
+            type="button"
+            className="st-context-toggle"
+            aria-expanded={showSources}
+            aria-controls={sourcesId}
+            onClick={() => setShowSources((open) => !open)}
+          >
+            Источники для ответа:{" "}
+            <b>{sources.length ? `${sources.length} ${materialsWord(sources.length)}` : "не выбраны"}</b>
+          </button>
+          <div id={sourcesId} className="st-context-list" hidden={!showSources}>
+            {sources.length ? (
+              <ul>
+                {sources.map((document) => (
+                  <li key={document.id}>{document.title}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>Lura ответит без ваших материалов — только на общих знаниях и найденном в интернете.</p>
+            )}
+            <p className="st-context-hint">
+              Выбор меняется галочками в «Материалах» слева. Вложения к сообщению уходят только с ним.
+            </p>
+          </div>
+        </div>
+
+        <div className="st-composer-box">
           <textarea
             ref={area}
             value={value}
             rows={1}
-            placeholder="Спросите Луру"
+            placeholder="Спросите Lura"
+            aria-label="Сообщение для Lura"
             onChange={(event) => {
               setValue(event.target.value);
               const element = event.target;
@@ -520,43 +367,35 @@ export function StudioPanel({
             }}
           />
 
-          <div className="st-composer-row">
-            <button
-              className="st-icon"
-              onClick={() => fileInput.current?.click()}
-              disabled={busy}
-              title="Приложить файл или картинку"
-              aria-label="Приложить файл"
-            >
-              <ClipIcon />
-            </button>
-
-            <button
-              className={cx("st-icon", commandOn && "is-on")}
-              onClick={toggleCommand}
-              disabled={busy}
-              title={`Разбор по пайплайну: ${REPORT_COMMAND}`}
-              aria-label="Режим разбора"
-              aria-pressed={commandOn}
-            >
-              <CommandIcon />
-            </button>
-
-            <span className="st-composer-sep" aria-hidden="true" />
-
-            <div className="st-chips">
+          {attachments.length ? (
+            <div className="st-chips" aria-label="Вложения к этому сообщению">
+              <span className="st-chips-label">Вложения:</span>
               {attachments.map((attachment, index) => (
                 <span key={`${attachment.name}-${index}`} className="st-chip">
                   <span className="st-chip-name">{attachment.name}</span>
                   <button
+                    type="button"
                     onClick={() => setAttachments((current) => current.filter((_, position) => position !== index))}
-                    aria-label={`Убрать ${attachment.name}`}
+                    aria-label={`Убрать вложение «${attachment.name}»`}
                   >
                     <CloseIcon />
                   </button>
                 </span>
               ))}
             </div>
+          ) : null}
+
+          <div className="st-composer-row">
+            <button
+              type="button"
+              className="st-icon"
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+              aria-label="Приложить файл или картинку к сообщению"
+              data-tip="Приложить к сообщению"
+            >
+              <ClipIcon />
+            </button>
 
             <span className="st-composer-gap" />
 
@@ -575,16 +414,17 @@ export function StudioPanel({
             />
 
             {busy ? (
-              <button className="st-send is-stop" onClick={onStop} title="Остановить" aria-label="Остановить">
+              <button type="button" className="st-send is-stop" onClick={onStop} aria-label="Остановить ответ" data-tip="Остановить">
                 <StopIcon />
               </button>
             ) : (
               <button
+                type="button"
                 className="st-send"
                 onClick={send}
                 disabled={!value.trim()}
-                title="Отправить"
-                aria-label="Отправить"
+                aria-label="Отправить сообщение"
+                data-tip="Отправить · Enter"
               >
                 <SendIcon />
               </button>
@@ -605,7 +445,7 @@ function Reply({
   active: boolean;
   onSelect: () => void;
 }) {
-  /* Разговорный ответ в окно вывода не уходит, поэтому здесь он целиком и с
+  /* Разговорный ответ в центр не уходит, поэтому здесь он целиком и с
      разметкой: список или маленькая таблица без неё превращаются в кашу. */
   if (message.mode === "chat") {
     return (
@@ -618,17 +458,17 @@ function Reply({
     );
   }
 
-  const line = answerLine(message.text);
   return (
     <article className="st-reply">
-      <ToolList tools={message.tools ?? []} />
       <button
-        className={cx("st-reply-text", active && "is-active", !line.whole && "is-brief")}
+        type="button"
+        className={cx("st-reply-report", active && "is-active")}
         onClick={onSelect}
-        title="Показать в окне вывода"
+        aria-current={active ? "true" : undefined}
       >
-        {line.text}
-        {!line.whole ? <span className="st-reply-more">Полный ответ в окне вывода</span> : null}
+        <span className="st-reply-kind">Отчёт готов</span>
+        <span className="st-reply-brief">{brief(message.text)}</span>
+        <span className="st-reply-more">{active ? "Открыт в центре" : "Открыть отчёт"}</span>
       </button>
     </article>
   );
@@ -636,7 +476,11 @@ function Reply({
 
 function ToolList({ tools, running }: { tools: ToolTrace[]; running?: boolean }) {
   if (!tools.length) {
-    return running ? <p className="st-tool-idle">Lura думает…</p> : null;
+    return running ? (
+      <p className="st-tool-idle" role="status">
+        Lura думает…
+      </p>
+    ) : null;
   }
 
   return (
@@ -644,9 +488,11 @@ function ToolList({ tools, running }: { tools: ToolTrace[]; running?: boolean })
       {tools.map((trace, index) => (
         <div key={`${trace.name}-${index}`} className={cx("st-tool", !trace.ok && "is-failed")}>
           <span className="st-tool-name">{TOOL_LABEL[trace.name] ?? trace.name}</span>
-          <span className="st-tool-arg" title={trace.argument}>
-            {trace.argument}
-          </span>
+          {trace.argument ? (
+            <span className="st-tool-arg" title={trace.argument}>
+              {trace.argument}
+            </span>
+          ) : null}
           <span className="st-tool-note">{trace.summary || (running ? "…" : "")}</span>
         </div>
       ))}

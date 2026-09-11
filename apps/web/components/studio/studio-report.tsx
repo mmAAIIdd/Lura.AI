@@ -1,65 +1,107 @@
 "use client";
 
-import { LuraLogo } from "@/components/lura-logo";
+import { StopIcon } from "@/components/studio/icons";
 import { ReportMarkdown } from "@/components/studio/report-markdown";
-import { REPORT_COMMAND } from "@/lib/studio/command";
+import { cx } from "@/lib/studio/cx";
 import type { StudioMessage, ToolTrace } from "@/lib/studio/types";
 
 /**
- * Центральное окно — поле ответа и ничего больше.
+ * Разбор в центре: как он идёт и чем закончился.
  *
- * Ни заголовков, ни кнопок поверх текста: всё служебное живёт в панели
- * справа. Пока ответа нет, здесь стоит начальный экран: один знак посреди
- * белого поля читается как незагрузившаяся страница, а не как «спросите».
+ * Оба состояния названы словами над текстом: «Разбор выполняется» — с тем, что
+ * Lura делает прямо сейчас, и «Отчёт готов» — с датой. Без шапки разбор на
+ * несколько минут выглядел пустой страницей, а готовый отчёт — очередным
+ * ответом, про который непонятно, что это и что делать дальше.
  */
 
 type Props = {
+  /** Готовый отчёт. Пока идёт разбор, вместо него приходит streaming. */
   message: StudioMessage | null;
   streaming: { text: string; tools: ToolTrace[] } | null;
+  /** Вопрос, с которого начался разбор. */
+  question: string;
+  onStop: () => void;
+  onNew: () => void;
 };
 
-export function StudioReport({ message, streaming }: Props) {
+export function StudioReport({ message, streaming, question, onStop, onNew }: Props) {
   if (streaming) {
+    const last = streaming.tools[streaming.tools.length - 1];
+    const status = streaming.text ? "Пишет отчёт" : last ? describe(last) : "Готовит план разбора";
+
     return (
       <div className="st-report">
         <div className="st-report-body">
-          {streaming.text ? <ReportMarkdown source={streaming.text} /> : <Working tools={streaming.tools} />}
+          <header className="st-task">
+            <span className="st-task-state is-running">Разбор выполняется</span>
+            <h1>{question}</h1>
+            <p className="st-task-status" role="status">
+              {status}
+            </p>
+            <div className="st-task-actions">
+              <button type="button" className="st-btn st-btn-secondary" onClick={onStop}>
+                <StopIcon />
+                <span>Остановить</span>
+              </button>
+            </div>
+          </header>
+
+          {streaming.tools.length ? (
+            /* Ход разбора раскрыт, пока отчёта ещё нет, и сворачивается, когда
+               начинается текст: читать отчёт мимо двадцати строк шагов неудобно. */
+            <details className="st-steps" open={!streaming.text}>
+              <summary>Ход разбора · шагов: {streaming.tools.length}</summary>
+              <ol>
+                {streaming.tools.map((trace, index) => (
+                  <li
+                    key={`${trace.name}-${index}`}
+                    className={cx("st-step", !trace.summary ? "is-running" : trace.ok ? "is-done" : "is-failed")}
+                  >
+                    <span className="st-step-name">{describe(trace)}</span>
+                    {trace.summary ? <span className="st-step-note">{trace.summary}</span> : null}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          ) : null}
+
+          {streaming.text ? <ReportMarkdown source={streaming.text} /> : null}
         </div>
       </div>
     );
   }
 
-  if (!message) {
-    return (
-      <div className="st-report">
-        <div className="st-idle">
-          <div className="st-idle-inner">
-            {/* Знак в рамке, а не сам по себе: выцветший силуэт посреди пустого
-                листа читается как недогрузившаяся картинка, а не как состояние
-                экрана. */}
-            <span className="st-idle-badge">
-              <LuraLogo className="st-idle-mark" />
-            </span>
-            <h1>Здесь откроются файлы и отчёты</h1>
-            <p>
-              Выберите файл в проводнике слева или спросите Луру в чате справа — короткий ответ
-              придёт прямо туда. Полный разбор с отчётом запускает команда <code>{REPORT_COMMAND}</code>.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!message) return null;
 
   const sources = [...new Map((message.tools ?? []).flatMap((t) => t.sources ?? []).map((s) => [s.url, s])).values()];
+  const date = new Date(message.createdAt).toLocaleString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <div className="st-report">
       <div className="st-report-body">
+        <header className="st-task">
+          <span className="st-task-state is-done">Отчёт готов</span>
+          <h1>{question}</h1>
+          <p className="st-task-status">
+            {date}
+            {message.model ? ` · ${message.model}` : ""}
+          </p>
+          <div className="st-task-actions">
+            <button type="button" className="st-btn st-btn-secondary" onClick={onNew}>
+              Новый разбор
+            </button>
+          </div>
+        </header>
+
         <ReportMarkdown source={message.text} />
 
         {sources.length ? (
-          <section className="st-report-sources">
+          <section className="st-report-sources" aria-label="Открытые страницы">
             <ul>
               {sources.map((source) => (
                 <li key={source.url}>
@@ -76,25 +118,20 @@ export function StudioReport({ message, streaming }: Props) {
   );
 }
 
-/** Пока текста нет — то, чем агент занят прямо сейчас. */
-function Working({ tools }: { tools: ToolTrace[] }) {
-  const last = tools[tools.length - 1];
-  return (
-    <div className="st-working">
-      <p>{last ? describe(last) : "…"}</p>
-      <span />
-      <span />
-      <span />
-    </div>
-  );
-}
-
+/** Шаг разбора человеческими словами. Аргумент у некоторых шагов на старте пуст. */
 function describe(trace: ToolTrace): string {
-  if (trace.name === "web_search") return `Ищет: ${trace.argument}`;
-  if (trace.name === "fetch_url") return `Читает: ${trace.argument}`;
-  if (trace.name === "list_project") return "Смотрит проект";
-  if (trace.name === "read_project_file") return `Открывает файл: ${trace.argument}`;
-  if (trace.name === "create_folder") return `Создаёт папку: ${trace.argument}`;
-  if (trace.name === "write_project_file") return `Записывает файл: ${trace.argument}`;
-  return `Документы: ${trace.argument}`;
+  const labels: Record<string, string> = {
+    web_search: "Ищет в интернете",
+    fetch_url: "Читает страницу",
+    search_documents: "Ищет в материалах",
+    read_document: "Читает материал",
+    analyze_table: "Считает показатели",
+    count_groups: "Считает темы",
+    list_project: "Смотрит файлы проекта",
+    read_project_file: "Открывает файл",
+    create_folder: "Создаёт папку",
+    write_project_file: "Записывает файл",
+  };
+  const label = labels[trace.name] ?? "Работает";
+  return trace.argument ? `${label}: ${trace.argument}` : label;
 }

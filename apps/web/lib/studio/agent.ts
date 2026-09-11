@@ -33,8 +33,8 @@ import { TOOL_DECLARATIONS, runTool } from "@/lib/studio/tools";
  * возвращается ей результатом. Наверх при этом уходят события — что агент
  * сейчас делает — чтобы окно вывода показывало работу, а не спиннер.
  *
- * Режим определяется командой в самом запросе: «/lur manager-dev start»
- * включает разбор по пайплайну, всё остальное — обычный разговор. От режима
+ * Режим определяется командой в самом запросе: кнопка «Начать разбор»
+ * подставляет её перед вопросом, всё остальное — обычный разговор. От режима
  * зависят и системная инструкция, и бюджет времени: ждать две минуты ответа
  * на «привет» никто не станет.
  */
@@ -65,6 +65,8 @@ type RunInput = {
   /** Публичное имя модели: lura-pro или lura-fast. */
   model?: string;
   attachments?: Attachment[];
+  /** Материалы, выбранные пользователем. Не передан — доступны все. */
+  sources?: string[];
   signal?: AbortSignal;
 };
 
@@ -108,17 +110,25 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   yield { type: "mode", mode };
   yield { type: "model", model: tier };
 
-  const [documents, business] = await Promise.all([listDocuments(), businessDocument()]);
+  /* Агент видит ровно те материалы, что отмечены у пользователя: иначе экран
+     обещает «ответ по этим трём файлам», а разбор тихо опирается на четвёртый. */
+  const only = input.sources ? new Set(input.sources) : null;
+  const [allDocuments, allBusiness] = await Promise.all([listDocuments(), businessDocument()]);
+  const documents = only ? allDocuments.filter((document) => only.has(document.id)) : allDocuments;
+  const business = allBusiness && (!only || only.has(allBusiness.id)) ? allBusiness : null;
   const businessContext = business ? { document: business, text: await readDocumentText(business.id) } : null;
 
   /* Фрагменты под текущий вопрос подставляются заранее: без этого первый ход
      модели уходит на search_documents с тем же самым запросом. */
-  const excerpts = documents.length ? await searchDocuments(modelText) : [];
+  const excerpts = documents.length ? await searchDocuments(modelText, undefined, only) : [];
   const systemInstruction = buildSystemInstruction({
     mode,
     business: businessContext,
     documents,
     excerpts,
+    selection: only
+      ? { total: allDocuments.length, businessSkipped: Boolean(allBusiness && !business) }
+      : null,
   });
 
   const contents: Content[] = [
@@ -211,7 +221,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
           },
         };
         const toolStarted = Date.now();
-        const outcome = await runTool(call.name, call.args);
+        const outcome = await runTool(call.name, call.args, { sources: only });
         log(`  ${call.name} ${Math.round((Date.now() - toolStarted) / 1000)}с — ${outcome.trace.summary}`);
         traces.push(outcome.trace);
         yield { type: "tool", phase: "done", trace: outcome.trace };

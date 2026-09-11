@@ -53,7 +53,14 @@ export type StudioThread = {
   messages: StudioMessage[];
 };
 
-export type ThreadSummary = { id: string; title: string; updatedAt: string; messages: number };
+export type ThreadSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messages: number;
+  /** Сколько в треде отчётов. Ноль — это разговор, а не разбор. */
+  reports: number;
+};
 
 export type WorkspaceState = {
   documents: StudioDocument[];

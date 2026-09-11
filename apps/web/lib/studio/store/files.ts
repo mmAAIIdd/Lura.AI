@@ -277,6 +277,8 @@ export function createFileStore(): StudioStore {
           title: thread.title,
           updatedAt: thread.updatedAt,
           messages: thread.messages.length,
+          /* У старых сообщений режима нет — они считаются отчётами, как и показывались. */
+          reports: thread.messages.filter((message) => message.role === "agent" && message.mode !== "chat").length,
         }))
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },

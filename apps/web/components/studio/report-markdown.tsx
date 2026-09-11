@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type MouseEvent, type ReactNode } from "react";
 
 import { FigureIssue, ReportChart, ReportTable } from "@/components/studio/report-figures";
 import { parseChartSpec, parseTableSpec } from "@/lib/studio/chart";
@@ -31,6 +31,14 @@ function renderInline(text: string): ReactNode[] {
     const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(token);
     if (link) {
       const href = link[2];
+      /* Ссылка на раздел этого же отчёта — из «Итога» к основанию вывода. */
+      if (/^#section-[\w-]+$/.test(href)) {
+        return (
+          <a key={index} href={href} onClick={jumpToSection}>
+            {link[1]}
+          </a>
+        );
+      }
       /* Только http(s): javascript: в ссылке из ответа модели — это XSS. */
       if (/^https?:\/\//i.test(href)) {
         return (
@@ -43,6 +51,34 @@ function renderInline(text: string): ReactNode[] {
     }
     return <Fragment key={index}>{token}</Fragment>;
   });
+}
+
+/**
+ * Метка раздела для ссылок из «Итога».
+ *
+ * Метка, а не id: один и тот же отчёт бывает открыт сразу в нескольких местах —
+ * в окне вывода и во вкладке файла, — и одинаковые id на странице ломали бы
+ * переход. Раздел ищется внутри того отчёта, где нажали ссылку.
+ */
+function sectionKey(text: string): string | null {
+  if (/^итог/i.test(text)) return "summary";
+  if (/^источник/i.test(text)) return "sources";
+  const numbered = /^(\d+)[.)]?\s/.exec(text);
+  return numbered ? numbered[1] : null;
+}
+
+function jumpToSection(event: MouseEvent<HTMLAnchorElement>) {
+  event.preventDefault();
+  const key = event.currentTarget.getAttribute("href")?.slice("#section-".length) ?? "";
+  const target = event.currentTarget
+    .closest(".report")
+    ?.querySelector<HTMLElement>(`[data-section="${key}"]`);
+  if (!target) return;
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  target.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+  /* Фокус переезжает к разделу: иначе с клавиатуры переход виден глазу, но
+     следующий Tab возвращает к ссылке в «Итоге». */
+  target.focus({ preventScroll: true });
 }
 
 type Block =
@@ -171,7 +207,12 @@ export function ReportMarkdown({ source }: { source: string }) {
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
           const Tag = (`h${block.level}` as unknown) as "h2";
-          return <Tag key={index}>{renderInline(block.text)}</Tag>;
+          const section = block.level === 2 ? sectionKey(block.text) : null;
+          return (
+            <Tag key={index} data-section={section ?? undefined} tabIndex={section ? -1 : undefined}>
+              {renderInline(block.text)}
+            </Tag>
+          );
         }
         if (block.kind === "list") {
           if (block.ordered) {

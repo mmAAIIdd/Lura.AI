@@ -174,6 +174,15 @@ export function CheckIcon(props: Props) {
   );
 }
 
+export function PlusIcon(props: Props) {
+  return (
+    <Glyph {...props}>
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </Glyph>
+  );
+}
+
 export function FileIcon(props: Props) {
   return (
     <Glyph {...props}>

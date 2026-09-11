@@ -33,9 +33,25 @@ export async function indexDocument(
   return { chunks: chunks.length, vectors: Boolean(usable) };
 }
 
-export async function searchDocuments(query: string, limit = LIMITS.autoContextChunks): Promise<Excerpt[]> {
+/**
+ * Поиск фрагментов, при необходимости — только по выбранным материалам.
+ *
+ * Хранилище фильтровать по документам не умеет, поэтому при выборе фрагменты
+ * берутся с запасом и отсеиваются здесь. Если выбранные материалы — малая доля
+ * всех, часть подходящих фрагментов может не попасть в запас; для десятков
+ * документов, с которыми работает команда, это приемлемо.
+ */
+export async function searchDocuments(
+  query: string,
+  limit = LIMITS.autoContextChunks,
+  only?: ReadonlySet<string> | null,
+): Promise<Excerpt[]> {
+  if (only && !only.size) return [];
   const embedded = await embedTexts([query], "RETRIEVAL_QUERY");
-  return searchChunks({ text: query, vector: embedded?.[0] ?? null }, limit);
+  const vector = embedded?.[0] ?? null;
+  if (!only) return searchChunks({ text: query, vector }, limit);
+  const hits = await searchChunks({ text: query, vector }, limit * 6);
+  return hits.filter((hit) => only.has(hit.documentId)).slice(0, limit);
 }
 
 export function renderExcerpts(excerpts: Excerpt[]): string {

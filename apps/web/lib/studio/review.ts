@@ -85,6 +85,23 @@ export function checkReport(text: string): Finding[] {
     );
   }
 
+  const summary = sections.find((section) => /^итог/i.test(section.heading));
+  if (!summary) {
+    findings.push({
+      level: "warning",
+      title: "Нет блока «Итог»",
+      detail: "Вывод, основания и ограничения приходится собирать по всему отчёту.",
+    });
+  } else {
+    const labels = ["Вывод", "Основания", "Ограничения", "Гипотезы", "Следующий шаг"];
+    const absent = labels.filter((label) => !summary.body.toLowerCase().includes(`**${label.toLowerCase()}`));
+    findings.push(
+      absent.length
+        ? { level: "warning", title: `В «Итоге» не хватает: ${absent.join(", ")}` }
+        : { level: "ok", title: "«Итог» с выводом, основаниями и ограничениями на месте" },
+    );
+  }
+
   const intro = trimmed.split("\n").find((line) => line.trim());
   findings.push(
     intro && /дата границ|границ[ыа]|до\s*\/\s*после/i.test(intro)

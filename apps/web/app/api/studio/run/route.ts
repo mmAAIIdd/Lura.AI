@@ -13,7 +13,7 @@ export const maxDuration = 300;
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { threadId?: string; prompt?: string; model?: string; attachments?: Attachment[] }
+    | { threadId?: string; prompt?: string; model?: string; attachments?: Attachment[]; sources?: unknown }
     | null;
 
   const prompt = body?.prompt?.trim();
@@ -22,6 +22,11 @@ export async function POST(request: Request) {
   }
 
   const attachments = (body?.attachments ?? []).slice(0, 6);
+  /* Выбор материалов приходит списком. Нет поля — значит, интерфейс ещё не знает
+     состава материалов, и ограничивать агента нечем: доступны все. */
+  const sources = Array.isArray(body?.sources)
+    ? body.sources.filter((id): id is string => typeof id === "string").slice(0, 500)
+    : undefined;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -31,7 +36,14 @@ export async function POST(request: Request) {
       };
 
       try {
-        for await (const event of runAgent({ threadId: body?.threadId, prompt, model: body?.model, attachments, signal: request.signal })) {
+        for await (const event of runAgent({
+          threadId: body?.threadId,
+          prompt,
+          model: body?.model,
+          attachments,
+          sources,
+          signal: request.signal,
+        })) {
           send(event);
         }
       } catch (error) {

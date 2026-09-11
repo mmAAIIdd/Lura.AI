@@ -307,7 +307,16 @@ export function createPostgresStore(): StudioStore {
     async listThreads(): Promise<ThreadSummary[]> {
       const conn = await db();
       const rows = await conn`
-        select id, title, updated_at, jsonb_array_length(messages) as messages
+        select
+          id,
+          title,
+          updated_at,
+          jsonb_array_length(messages) as messages,
+          (
+            select count(*)
+            from jsonb_array_elements(messages) as message
+            where message->>'role' = 'agent' and coalesce(message->>'mode', 'report') <> 'chat'
+          ) as reports
         from studio.threads
         order by updated_at desc
       `;
@@ -316,6 +325,7 @@ export function createPostgresStore(): StudioStore {
         title: String(row.title),
         updatedAt: new Date(row.updated_at as string).toISOString(),
         messages: Number(row.messages ?? 0),
+        reports: Number(row.reports ?? 0),
       }));
     },
 

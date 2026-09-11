@@ -1,21 +1,22 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { StudioDocument } from "@/lib/studio/types";
 import { cx } from "@/lib/studio/cx";
 
 /**
- * Кастомизация — то, из чего агент собирает контекст.
+ * Материалы целиком — то, из чего агент собирает контекст.
  *
- * Раньше на этом месте был переключатель режимов, но выбирать за агента, что
- * он сейчас разбирает, — не работа пользователя. Работа пользователя —
- * решить, что агент вообще знает о компании. Поэтому здесь документ о бизнесе,
- * источники и ссылки, и ничего кроме.
+ * В левой колонке материалы видны списком с галочками; здесь то, что в колонку
+ * не помещается: ссылка на страницу, документ о бизнесе, просмотр содержимого
+ * и удаление.
  */
 
 type Props = {
   documents: StudioDocument[];
+  /** Материал, который нужно сразу открыть на просмотр. */
+  focus?: string | null;
   busy: boolean;
   onUpload: (files: File[], asBusiness: boolean) => Promise<void>;
   onUploadUrl: (url: string, asBusiness: boolean) => Promise<void>;
@@ -25,7 +26,7 @@ type Props = {
 
 const ACCEPT = ".txt,.md,.markdown,.csv,.tsv,.json,.log,.yaml,.yml,.xml,.html,.htm";
 
-export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBusiness, onDelete }: Props) {
+export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, onMakeBusiness, onDelete }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<{ title: string; text: string; truncated: boolean } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
@@ -58,11 +59,20 @@ export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBu
     }
   }
 
+  /* Нажали «посмотреть» у материала в левой колонке — просмотр открывается
+     сразу, без второго клика по той же строке здесь. */
+  useEffect(() => {
+    const wanted = documents.find((document) => document.id === focus);
+    if (wanted) void open(wanted.id, wanted.title);
+    // Список документов обновляется после каждой загрузки; просмотр нужен только при смене запроса.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
   if (preview) {
     return (
       <div className="st-context">
         <header className="st-preview-head">
-          <button onClick={() => setPreview(null)}>← Назад</button>
+          <button onClick={() => setPreview(null)}>← Все материалы</button>
           <strong>{preview.title}</strong>
         </header>
         <pre className="st-preview">{preview.text}</pre>
@@ -74,8 +84,8 @@ export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBu
   return (
     <div className="st-context">
       <header className="st-context-head">
-        <h1>Кастомизация</h1>
-        <p>Контекст, из которого агент собирает разбор.</p>
+        <h1>Материалы</h1>
+        <p>Всё, на чём Lura строит разбор: файлы, ссылки на страницы и документ о бизнесе.</p>
       </header>
 
       <section
@@ -147,13 +157,16 @@ export function StudioContext({ documents, busy, onUpload, onUploadUrl, onMakeBu
         {business ? (
           <DocumentRow document={business} primary onDelete={onDelete} onOpen={open} loading={loading === business.id} />
         ) : (
-          <p className="st-context-empty">Не загружен — агент работает без контекста компании.</p>
+          <p className="st-context-empty">
+            Не загружен — Lura разбирает без контекста компании. Подойдёт описание компании, продукта, ролей
+            пользователей и целевых показателей.
+          </p>
         )}
       </section>
 
       <section className="st-context-block">
         <h2>
-          Источники <span>{sources.length}</span>
+          Остальные материалы <span>{sources.length}</span>
         </h2>
         {sources.length ? (
           <div className="st-doc-list">

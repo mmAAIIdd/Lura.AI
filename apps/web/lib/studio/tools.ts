@@ -199,6 +199,9 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
 
 export type ToolOutcome = { response: Record<string, unknown>; trace: ToolTrace };
 
+/** Материалы, которые пользователь разрешил для этого ответа. null — все. */
+export type ToolScope = { sources: ReadonlySet<string> | null };
+
 async function runWebSearch(args: Record<string, unknown>): Promise<ToolOutcome> {
   const query = String(args.query ?? "").trim();
   if (!query) throw new Error("Пустой запрос.");
@@ -284,12 +287,12 @@ async function runFetchUrl(args: Record<string, unknown>): Promise<ToolOutcome> 
   };
 }
 
-async function runSearchDocuments(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runSearchDocuments(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const query = String(args.query ?? "").trim();
   if (!query) throw new Error("Пустой запрос.");
   const limit = Math.min(Math.max(Number(args.limit) || 6, 1), 10);
 
-  const excerpts = await searchDocuments(query, limit);
+  const excerpts = await searchDocuments(query, limit, scope.sources);
   return {
     response: {
       excerpts: excerpts.map((excerpt) => ({ document: excerpt.title, text: excerpt.text })),
@@ -313,12 +316,20 @@ async function runSearchDocuments(args: Record<string, unknown>): Promise<ToolOu
  * совпадения ждать нельзя. Неоднозначность не разрешаем за неё: два похожих
  * названия — это повод переспросить, а не молча взять первое.
  */
-async function resolveDocument(raw: string): Promise<StudioDocument | { error: string }> {
+async function resolveDocument(raw: string, scope: ToolScope): Promise<StudioDocument | { error: string }> {
   const query = raw.trim().toLowerCase();
   if (!query) return { error: "Не указано название документа." };
 
-  const documents = await listDocuments();
-  if (!documents.length) return { error: "В рабочее пространство не загружено ни одного документа." };
+  const all = await listDocuments();
+  const chosen = scope.sources;
+  const documents = chosen ? all.filter((doc) => chosen.has(doc.id)) : all;
+  if (!documents.length) {
+    return {
+      error: all.length
+        ? "Для этого ответа не выбрано ни одного материала: пользователь отмечает их в «Материалах» слева."
+        : "В рабочее пространство не загружено ни одного документа.",
+    };
+  }
 
   const exact = documents.filter((doc) => doc.title.toLowerCase() === query);
   const partial = exact.length
@@ -334,9 +345,9 @@ async function resolveDocument(raw: string): Promise<StudioDocument | { error: s
   return partial[0];
 }
 
-async function runReadDocument(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runReadDocument(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const title = String(args.title ?? "");
-  const resolved = await resolveDocument(title);
+  const resolved = await resolveDocument(title, scope);
   if ("error" in resolved) {
     return { response: { error: resolved.error }, trace: { name: "read_document", argument: title, summary: resolved.error.slice(0, 160), ok: false } };
   }
@@ -368,9 +379,9 @@ async function runReadDocument(args: Record<string, unknown>): Promise<ToolOutco
   };
 }
 
-async function runAnalyzeTable(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runAnalyzeTable(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const name = String(args.document ?? "");
-  const resolved = await resolveDocument(name);
+  const resolved = await resolveDocument(name, scope);
   if ("error" in resolved) {
     return { response: { error: resolved.error }, trace: { name: "analyze_table", argument: name, summary: resolved.error.slice(0, 160), ok: false } };
   }
@@ -398,9 +409,9 @@ async function runAnalyzeTable(args: Record<string, unknown>): Promise<ToolOutco
   };
 }
 
-async function runCountGroups(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runCountGroups(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const name = String(args.document ?? "");
-  const resolved = await resolveDocument(name);
+  const resolved = await resolveDocument(name, scope);
   if ("error" in resolved) {
     return { response: { error: resolved.error }, trace: { name: "count_groups", argument: name, summary: resolved.error.slice(0, 160), ok: false } };
   }
@@ -540,7 +551,7 @@ async function runWriteProjectFile(args: Record<string, unknown>): Promise<ToolO
   };
 }
 
-const RUNNERS: Record<string, (args: Record<string, unknown>) => Promise<ToolOutcome>> = {
+const RUNNERS: Record<string, (args: Record<string, unknown>, scope: ToolScope) => Promise<ToolOutcome>> = {
   web_search: runWebSearch,
   fetch_url: runFetchUrl,
   search_documents: runSearchDocuments,
@@ -558,7 +569,11 @@ const RUNNERS: Record<string, (args: Record<string, unknown>) => Promise<ToolOut
  * агент должен уметь пойти другим путём, а не оборвать анализ на первой
  * недоступной странице.
  */
-export async function runTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
+export async function runTool(
+  name: string,
+  args: Record<string, unknown>,
+  scope: ToolScope = { sources: null },
+): Promise<ToolOutcome> {
   const runner = RUNNERS[name];
   if (!runner) {
     return {
@@ -568,7 +583,7 @@ export async function runTool(name: string, args: Record<string, unknown>): Prom
   }
 
   try {
-    return await runner(args);
+    return await runner(args, scope);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Неизвестная ошибка.";
     return {

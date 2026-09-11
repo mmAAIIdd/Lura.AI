@@ -8,24 +8,22 @@ import {
   FilePlusIcon,
   FolderPlusIcon,
   PencilIcon,
+  PlusIcon,
   TrashIcon,
-  UploadIcon,
 } from "@/components/studio/icons";
+import { SideSection } from "@/components/studio/side-section";
 import { cx } from "@/lib/studio/cx";
-import { MAX_FILE_CHARS, PROJECT_ROOT, nodePath } from "@/lib/studio/project";
+import { nodePath } from "@/lib/studio/project";
 import type { StudioNode } from "@/lib/studio/types";
 
 /**
- * Проводник проекта.
+ * Файлы проекта: отчёты разборов и документы, которые ведут пользователь и агент.
  *
- * Отчёты Луры — это файлы, и обращаться с ними нужно как с файлами: раскладывать
- * по папкам, переименовывать, удалять. Пока результат жил одним «последним
- * ответом», всё, кроме свежего разбора, было недоступно.
- *
- * Действий наверху три, и все подписаны словами: значок «папка с плюсом» в
- * шестнадцать пикселей не объясняет, что он делает, пока на него не нажмёшь.
- * Переименование и удаление живут в самой строке — там, где понятно, к чему
- * они относятся.
+ * Это не материалы для анализа — те загружаются в «Материалы». Поэтому здесь
+ * нет загрузки с компьютера: две кнопки «загрузить» в соседних разделах
+ * заставляли угадывать, какая из них кормит разбор. Создать документ или папку
+ * — редкие действия, им место в небольшом меню у заголовка, а не во всю ширину
+ * колонки.
  *
  * Дерево собирается из плоского списка на каждый рендер: узлов здесь десятки, а
  * не тысячи, и держать вторую, вложенную копию состояния — значит держать её
@@ -44,31 +42,25 @@ type Props = {
   revision: number;
 };
 
-/* Файл уходит в теле JSON-запроса, а тело на бессерверной площадке ограничено
-   примерно 4.5 МБ. */
-const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
-const UPLOAD_ACCEPT = ".txt,.md,.markdown,.csv,.tsv,.json,.log,.yaml,.yml,.xml,.html,.htm";
+const ROOT_LABEL = "Проект";
 
 export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
   const [nodes, setNodes] = useState<StudioNode[]>([]);
   const [open, setOpen] = useState<Set<string>>(new Set());
-  const [rootOpen, setRootOpen] = useState(true);
   /* Выделение отдельно от открытого файла: папку можно выбрать, но не открыть,
      и именно выбранная папка решает, куда лягут новые элементы. */
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const input = useRef<HTMLInputElement | null>(null);
-  const picker = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/studio/files", { cache: "no-store" });
     const body = (await response.json().catch(() => null)) as { nodes?: StudioNode[]; error?: string } | null;
     if (!response.ok) {
-      setError(body?.error ?? "Проект не открылся.");
+      setError(body?.error ?? "Файлы проекта не открылись.");
       return;
     }
     const list = body?.nodes ?? [];
@@ -117,12 +109,11 @@ export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
 
   const targetLabel = useMemo(() => {
     const folder = nodes.find((item) => item.id === target);
-    return folder ? nodePath(nodes, folder) : PROJECT_ROOT;
+    return folder ? `${ROOT_LABEL}/${nodePath(nodes, folder)}` : ROOT_LABEL;
   }, [nodes, target]);
 
   /** Раскрыть папку со всеми предками, чтобы новый элемент было видно. */
   function reveal(folderId: string | null) {
-    setRootOpen(true);
     if (!folderId) return;
     setOpen((current) => {
       const next = new Set(current);
@@ -166,7 +157,7 @@ export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
     const node = result?.node;
     if (!node) return;
     setSelected(node.id);
-    /* Новый файл сразу открывается: создают его затем, чтобы писать. */
+    /* Новый документ сразу открывается: создают его затем, чтобы писать. */
     if (node.kind === "file") onOpen(node);
   }
 
@@ -188,63 +179,6 @@ export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
     await send(`/api/studio/files/${node.id}`, { method: "DELETE" });
   }
 
-  /**
-   * Файлы с компьютера ложатся в проект как есть, текстом.
-   *
-   * Проблемные файлы не останавливают остальные: из пяти выбранных четыре
-   * должны загрузиться, а про пятый — сказано, что с ним не так.
-   */
-  async function upload(files: File[]) {
-    if (!files.length) return;
-    const parentId = target;
-    setError(null);
-    setUploading(true);
-
-    const problems: string[] = [];
-    let last: StudioNode | null = null;
-    try {
-      for (const file of files) {
-        if (file.size > MAX_UPLOAD_BYTES) {
-          problems.push(`«${file.name}» больше 3 МБ`);
-          continue;
-        }
-        const content = await file.text().catch(() => null);
-        /* Нулевой символ в «тексте» бывает только у двоичного файла: картинка,
-           прочитанная как строка, превращается в экран мусора. */
-        if (content === null || content.includes(String.fromCharCode(0))) {
-          problems.push(`«${file.name}» — не текстовый файл`);
-          continue;
-        }
-        if (content.length > MAX_FILE_CHARS) {
-          problems.push(`«${file.name}» длиннее ${MAX_FILE_CHARS.toLocaleString("ru-RU")} символов`);
-          continue;
-        }
-
-        const response = await fetch("/api/studio/files", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ parentId, kind: "file", name: file.name, content }),
-        });
-        const body = (await response.json().catch(() => null)) as { node?: StudioNode; error?: string } | null;
-        if (!response.ok || !body?.node) {
-          problems.push(`«${file.name}»: ${body?.error ?? "не загрузился"}`);
-          continue;
-        }
-        last = body.node;
-      }
-    } finally {
-      setUploading(false);
-    }
-
-    reveal(parentId);
-    await load();
-    if (last) {
-      setSelected(last.id);
-      onOpen(last);
-    }
-    if (problems.length) setError(`Не загрузились: ${problems.join("; ")}.`);
-  }
-
   function toggle(id: string) {
     setOpen((current) => {
       const next = new Set(current);
@@ -262,7 +196,7 @@ export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
           <NameInput
             inputRef={input}
             initial=""
-            placeholder={draft.kind === "folder" ? "Имя папки" : "Имя файла"}
+            placeholder={draft.kind === "folder" ? "Имя папки" : "Имя документа"}
             onCancel={() => setDraft(null)}
             onCommit={create}
           />
@@ -290,6 +224,7 @@ export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
               if (folder) toggle(node.id);
               else onOpen(node);
             }}
+            aria-expanded={folder ? expanded : undefined}
             title={folder ? node.name : `${node.name} — ${node.chars ?? 0} символов`}
           >
             <span className={cx("st-tree-caret", folder && expanded && "is-open")} aria-hidden="true">
@@ -307,10 +242,15 @@ export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
             />
           ) : (
             <span className="st-tree-tools">
-              <button type="button" onClick={() => setRenaming(node.id)} title="Переименовать" aria-label="Переименовать">
+              <button
+                type="button"
+                onClick={() => setRenaming(node.id)}
+                title="Переименовать"
+                aria-label={`Переименовать «${node.name}»`}
+              >
                 <PencilIcon />
               </button>
-              <button type="button" onClick={() => remove(node)} title="Удалить" aria-label="Удалить">
+              <button type="button" onClick={() => remove(node)} title="Удалить" aria-label={`Удалить «${node.name}»`}>
                 <TrashIcon />
               </button>
             </span>
@@ -330,86 +270,142 @@ export function FileExplorer({ openedId, onOpen, onNodes, revision }: Props) {
   const files = nodes.filter((node) => node.kind === "file").length;
 
   return (
-    <aside className="st-explorer" aria-label="Проводник проекта">
-      <div className="st-explorer-head">
-        <span>Проводник</span>
-        <span className="st-explorer-count">{files ? `${files} ${plural(files)}` : ""}</span>
-      </div>
-
-      <div className="st-explorer-actions">
-        <button type="button" className="st-explorer-action" onClick={() => startDraft("folder")}>
-          <FolderPlusIcon />
-          <span>Добавить папку</span>
-        </button>
-        <button type="button" className="st-explorer-action" onClick={() => startDraft("file")}>
-          <FilePlusIcon />
-          <span>Добавить файл</span>
-        </button>
-        <button
-          type="button"
-          className="st-explorer-action"
-          onClick={() => picker.current?.click()}
-          disabled={uploading}
-          title={`Текстовые файлы: ${UPLOAD_ACCEPT.replaceAll(",", " ")}`}
-        >
-          <UploadIcon />
-          <span>{uploading ? "Загружаем…" : "Загрузить с компьютера"}</span>
-        </button>
-        <input
-          ref={picker}
-          type="file"
-          multiple
-          hidden
-          accept={UPLOAD_ACCEPT}
-          onChange={(event) => {
-            const chosen = Array.from(event.target.files ?? []);
-            event.target.value = "";
-            void upload(chosen);
-          }}
-        />
-        <p className="st-explorer-target" title={targetLabel}>
-          Куда: <b>{targetLabel}</b>
-        </p>
-      </div>
-
+    <SideSection
+      title="Файлы проекта"
+      meta={files ? `${files} ${plural(files)}` : undefined}
+      actions={<CreateMenu target={targetLabel} onPick={startDraft} />}
+    >
       <div className="st-explorer-body">
         <button
           type="button"
-          className="st-tree-root"
-          onClick={() => {
-            setSelected(null);
-            setRootOpen((value) => !value);
-          }}
+          className={cx("st-tree-root", selected === null && "is-target")}
+          onClick={() => setSelected(null)}
+          title="Выбрать корень проекта: новые документы и папки лягут сюда"
         >
-          <span className={cx("st-tree-caret", rootOpen && "is-open")} aria-hidden="true">
-            <ChevronIcon />
-          </span>
-          {PROJECT_ROOT}
+          {ROOT_LABEL}
         </button>
 
-        {rootOpen ? (
-          <ul className="st-tree-list">
-            {(children.get(null) ?? []).map((node) => renderRow(node, 1))}
-            {draftRow(null, 1)}
-          </ul>
-        ) : null}
+        <ul className="st-tree-list">
+          {(children.get(null) ?? []).map((node) => renderRow(node, 1))}
+          {draftRow(null, 1)}
+        </ul>
 
         {loaded && !nodes.length && !draft ? (
-          <p className="st-explorer-empty">
-            Пусто. Добавьте папку или файл — сюда же Лура складывает отчёты и файлы, которые вы попросите её записать.
+          <p className="st-side-empty">
+            Отчёты разборов появятся здесь сами. Документ или папку можно создать кнопкой «+» у заголовка.
+          </p>
+        ) : null}
+
+        {error ? (
+          <p className="st-explorer-error" role="alert">
+            {error}
+            <button type="button" onClick={() => setError(null)} aria-label="Скрыть ошибку">
+              <CloseIcon />
+            </button>
           </p>
         ) : null}
       </div>
+    </SideSection>
+  );
+}
 
-      {error ? (
-        <p className="st-explorer-error" role="alert">
-          {error}
-          <button type="button" onClick={() => setError(null)} aria-label="Скрыть">
-            <CloseIcon />
+/**
+ * Меню «Создать» у заголовка раздела.
+ *
+ * Поведение обычного меню: фокус на первом пункте, стрелки водят, Escape
+ * закрывает и возвращает фокус на кнопку, клик мимо закрывает.
+ */
+function CreateMenu({ target, onPick }: { target: string; onPick: (kind: StudioNode["kind"]) => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const items = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    items.current[0]?.focus();
+    const away = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", away);
+    return () => window.removeEventListener("pointerdown", away);
+  }, [open]);
+
+  function close() {
+    setOpen(false);
+    trigger.current?.focus();
+  }
+
+  function pick(kind: StudioNode["kind"]) {
+    setOpen(false);
+    onPick(kind);
+  }
+
+  return (
+    <div className="st-menu" ref={root}>
+      <button
+        ref={trigger}
+        type="button"
+        className="st-side-icon"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Создать документ или папку"
+        data-tip="Создать документ или папку"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <PlusIcon />
+      </button>
+
+      {open ? (
+        <div
+          className="st-menu-list"
+          role="menu"
+          aria-label="Создать в проекте"
+          onKeyDown={(event) => {
+            const list = items.current.filter((item): item is HTMLButtonElement => Boolean(item));
+            const index = list.indexOf(document.activeElement as HTMLButtonElement);
+            if (event.key === "Escape") {
+              event.preventDefault();
+              close();
+            } else if (event.key === "ArrowDown") {
+              event.preventDefault();
+              list[(index + 1) % list.length]?.focus();
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              list[(index - 1 + list.length) % list.length]?.focus();
+            } else if (event.key === "Tab") {
+              setOpen(false);
+            }
+          }}
+        >
+          <button
+            ref={(element) => {
+              items.current[0] = element;
+            }}
+            type="button"
+            role="menuitem"
+            onClick={() => pick("file")}
+          >
+            <FilePlusIcon />
+            <span>Создать документ</span>
           </button>
-        </p>
+          <button
+            ref={(element) => {
+              items.current[1] = element;
+            }}
+            type="button"
+            role="menuitem"
+            onClick={() => pick("folder")}
+          >
+            <FolderPlusIcon />
+            <span>Создать папку</span>
+          </button>
+          <p className="st-menu-note" title={target}>
+            Куда: {target}
+          </p>
+        </div>
       ) : null}
-    </aside>
+    </div>
   );
 }
 
