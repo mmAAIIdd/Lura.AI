@@ -12,7 +12,9 @@
   --st-line-soft: #eff1f4;
   --st-ink: #15171c;
   --st-muted: #585f6b;
-  --st-muted-soft: #878e9a;
+  /* Приглушённый текст держит 4,5:1 и на белом, и на фоне панели: прежний
+     #878e9a давал 3,3:1, и подписи с инструкциями уходили на второй план. */
+  --st-muted-soft: #6b7280;
   --st-accent: #1a5fd6;
   --st-accent-soft: #e8eefb;
   --st-danger: #b42318;
@@ -20,9 +22,9 @@
   --st-ring: 0 0 0 3px rgba(26, 95, 214, .16);
   --st-lift: 0 1px 2px rgba(20, 22, 26, .06), 0 8px 24px rgba(20, 22, 26, .07);
 
-  --st-panel-w: 440px;
+  --st-panel-w: 400px;
   --st-grip-w: 6px;
-  --st-explorer-w: 276px;
+  --st-explorer-w: 256px;
 
   display: grid;
   grid-template-columns: var(--st-explorer-w) minmax(0, 1fr) var(--st-grip-w) var(--st-panel-w);
@@ -180,7 +182,7 @@ body.st-resizing iframe { pointer-events: none; }
 
 .st-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   border-left: 1px solid var(--st-line);
   background: var(--st-panel);
@@ -209,8 +211,8 @@ body.st-resizing iframe { pointer-events: none; }
 
 .st-act {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
   place-items: center;
   border: 0;
@@ -483,8 +485,8 @@ body.st-resizing iframe { pointer-events: none; }
 
 .st-icon {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
   place-items: center;
   border: 0;
@@ -500,7 +502,7 @@ body.st-resizing iframe { pointer-events: none; }
 .st-composer-sep { width: 1px; height: 20px; flex: 0 0 auto; background: var(--st-line); }
 .st-composer-gap { flex: 1 1 auto; min-width: 0; }
 
-.st-chips { display: flex; min-width: 0; gap: 5px; overflow: hidden; }
+.st-chips { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
 .st-chip {
   display: inline-flex;
   min-width: 0;
@@ -515,14 +517,14 @@ body.st-resizing iframe { pointer-events: none; }
   font-size: 12.5px;
 }
 .st-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.st-chip button { display: grid; width: 17px; height: 17px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; border-radius: 5px; background: transparent; color: var(--st-muted-soft); }
+.st-chip button { display: grid; width: 24px; height: 24px; flex: 0 0 auto; place-items: center; border: 0; padding: 0; border-radius: 5px; background: transparent; color: var(--st-muted-soft); }
 .st-chip button svg { width: 14px; height: 14px; stroke-width: 2.6; }
 .st-chip button:hover { color: var(--st-danger); }
 
 .st-send {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
   place-items: center;
   border: 0;
@@ -693,17 +695,19 @@ body.st-resizing iframe { pointer-events: none; }
 
 /* ---------- Текст ответа ---------- */
 
-.report { font-size: 16px; line-height: 1.72; }
-/* Отчёт — документ, а не интерфейс: его заголовки набраны антиквой, как на
-   остальном сайте. Текст под ними остаётся гротеском — читать длинный разбор
-   с экрана им проще. */
+.report { font-size: 16px; line-height: 1.625; }
+/* Заголовки отчёта набраны тем же гротеском, что и весь интерфейс: одиночная
+   антиква посреди рабочего экрана выглядела чужеродно и спорила с шапкой
+   разбора. Иерархию держат размер и насыщенность. */
 .report h2 {
-  margin: 32px 0 13px;
-  font-family: var(--font-serif, ui-serif, Georgia, serif);
-  font-size: 23px;
-  font-weight: 500;
-  letter-spacing: -.008em;
+  margin: 32px 0 12px;
+  font-size: 22px;
+  font-weight: 660;
+  line-height: 1.35;
+  letter-spacing: -.01em;
 }
+/* Переход из «Итога» к разделу не упирает заголовок в край окна. */
+.report [data-section] { scroll-margin-top: 16px; }
 .report h2:first-child { margin-top: 0; }
 .report h3 { margin: 22px 0 9px; font-size: 16.5px; font-weight: 620; }
 .report h4 { margin: 17px 0 6px; color: var(--st-muted); font-size: 15px; font-weight: 620; }
@@ -750,18 +754,7 @@ body.st-resizing iframe { pointer-events: none; }
   .st-report-body, .st-context { padding-inline: 24px; }
 }
 
-/* На узком экране двух колонок не получится, а тянуть границу нечем: панель
-   встаёт под ответом, граница убирается совсем. */
-@media (max-width: 900px) {
-  .st {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-  .st-grip, .st-reveal { display: none; }
-  .st-panel { max-height: 60vh; border-left: 0; border-top: 1px solid var(--st-line); }
-  .st.no-panel .st-panel { display: none; }
-  .st-report-body, .st-context { padding: 24px 18px 40px; }
-}
+/* Узкий экран — в workspace.css: колонки там открываются по одной. */
 
 /* ---------- Графики и таблицы отчёта ---------- */
 

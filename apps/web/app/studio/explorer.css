@@ -63,7 +63,8 @@
 }
 .st-explorer-target b { color: var(--st-muted); font-weight: 600; }
 
-.st-explorer-body { min-height: 0; padding: 8px 6px; overflow: auto; }
+/* Дерево живёт внутри прокрутки левой колонки — своей прокрутки у него нет. */
+.st-explorer-body { padding: 0; }
 
 .st-tree-root {
   display: flex;
@@ -130,8 +131,8 @@
 .st-tree-row.is-on .st-tree-tools { display: flex; }
 .st-tree-tools button {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border: 0;
   border-radius: 5px;

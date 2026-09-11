@@ -4,6 +4,7 @@ import { StudioScreen } from "@/components/studio/studio-screen";
 
 import "./studio.css";
 import "./explorer.css";
+import "./workspace.css";
 
 export const metadata: Metadata = {
   title: "Lura — рабочее пространство",
