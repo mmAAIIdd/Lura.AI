@@ -4,12 +4,15 @@
    ними можно двигать, панель — сворачивать. */
 
 .st {
+  /* Фон колонок заметно отличается от белого центра, а линии видны на обоих:
+     прежние #f8f9fb и #e4e6eb давали почти неразличимые края, и три колонки
+     сливались в одно светлое поле. */
   --st-bg: #ffffff;
-  --st-panel: #f8f9fb;
-  --st-sunken: #ecedf1;
-  --st-hover: #edeef2;
-  --st-line: #e4e6eb;
-  --st-line-soft: #eff1f4;
+  --st-panel: #f1f4f9;
+  --st-sunken: #e2e6ee;
+  --st-hover: #e6eaf2;
+  --st-line: #d3d9e3;
+  --st-line-soft: #e2e6ee;
   --st-ink: #15171c;
   --st-muted: #585f6b;
   /* Приглушённый текст держит 4,5:1 и на белом, и на фоне панели: прежний
@@ -85,37 +88,22 @@
 .st-main-body { flex: 1 1 auto; min-height: 0; }
 
 .st-report { display: grid; grid-template-rows: minmax(0, 1fr); height: 100%; min-height: 0; }
-.st-report-body { min-height: 0; overflow-y: auto; padding: 44px 40px 80px; }
-.st-report-body > * { width: min(100%, 760px); margin-inline: auto; }
+/* Поля центра узкие: воздух вокруг колонки текста и так создаёт пустоту, а
+   сорок пикселей сверху отодвигали шапку разбора без пользы. */
+.st-report-body { min-height: 0; overflow-y: auto; padding: 24px 32px 64px; }
+.st-report-body > * { width: min(100%, 820px); margin-inline: auto; }
 
 .st-report-sources { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--st-line); }
 .st-report-sources ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; }
 .st-report-sources li { font-size: 14px; }
 .st-report-sources a { color: var(--st-accent); }
 
-/* Пустой центр. Голый знак посреди белого поля читается как незагрузившаяся
-   страница, поэтому здесь сказано, что это за экран и с чего начать. */
-.st-idle { display: grid; place-items: center; min-height: 0; padding: 24px; }
-.st-idle-inner { display: grid; justify-items: center; gap: 14px; max-width: 440px; text-align: center; }
-.st-idle-badge {
-  display: grid;
-  width: 56px;
-  height: 56px;
-  place-items: center;
-  border: 1px solid var(--st-line);
-  border-radius: 16px;
-  background: var(--st-panel);
-  box-shadow: var(--st-lift);
-}
-.st-idle-mark { width: 28px; height: 28px; color: var(--st-muted-soft); }
-.st-idle h1 {
-  margin: 0;
-  font-family: var(--font-serif, ui-serif, Georgia, serif);
-  font-size: 22px;
-  font-weight: 500;
-  letter-spacing: -.01em;
-}
-.st-idle p { margin: 0; color: var(--st-muted-soft); font-size: 14px; line-height: 1.6; }
+/* Пустой центр. Белое поле посреди экрана читается как незагрузившаяся
+   страница, поэтому здесь сказано, чем он станет, и дан следующий шаг. */
+.st-idle { display: grid; height: 100%; min-height: 0; place-items: center; padding: 24px; }
+.st-idle-inner { display: grid; justify-items: center; gap: 12px; max-width: 460px; text-align: center; }
+.st-idle h1 { margin: 0; font-size: 22px; font-weight: 680; line-height: 30px; letter-spacing: -.02em; }
+.st-idle p { margin: 0 0 4px; color: var(--st-muted); font-size: 15px; line-height: 22px; }
 .st-idle code {
   padding: 2px 6px;
   border-radius: 5px;
@@ -190,10 +178,11 @@ body.st-resizing iframe { pointer-events: none; }
 
 .st-panel-head {
   display: flex;
-  height: 54px;
+  height: 52px;
   align-items: center;
   gap: 10px;
-  padding: 0 12px 0 16px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--st-line);
 }
 
 .st-brand {
@@ -461,9 +450,9 @@ body.st-resizing iframe { pointer-events: none; }
   transition: border-color .12s ease, box-shadow .12s ease;
 }
 .st-composer-box:focus-within { border-color: var(--st-accent); box-shadow: 0 0 0 3px rgba(26, 95, 214, .1); }
-/* Набранная команда разбора видна по рамке: режим меняется молча, и без
-   этого признака отличить его от обычного вопроса можно только по тексту. */
-.st-composer-box.is-command { border-color: var(--st-accent); }
+/* Включённый разбор виден по рамке поля: он стоит минут работы, и спутать его
+   с обычным вопросом нельзя. */
+.st-composer-box.is-report { border-color: var(--st-accent); box-shadow: 0 0 0 3px rgba(26, 95, 214, .12); }
 
 .st-composer textarea {
   width: 100%;
@@ -602,11 +591,11 @@ body.st-resizing iframe { pointer-events: none; }
 
 /* ---------- Кастомизация ---------- */
 
-.st-context { display: block; height: 100%; min-height: 0; overflow-y: auto; padding: 44px 40px 80px; }
-.st-context > * { width: min(100%, 760px); margin-inline: auto; }
+.st-context { display: block; height: 100%; min-height: 0; overflow-y: auto; padding: 24px 32px 64px; }
+.st-context > * { width: min(100%, 820px); margin-inline: auto; }
 
-.st-context-head h1 { margin: 0; font-size: 22px; font-weight: 620; letter-spacing: -.02em; }
-.st-context-head p { margin: 9px 0 0; color: var(--st-muted); font-size: 14.5px; }
+.st-context-head h1 { margin: 0; font-size: 24px; font-weight: 680; line-height: 32px; letter-spacing: -.02em; }
+.st-context-head p { margin: 8px 0 0; color: var(--st-muted); font-size: 15px; line-height: 22px; }
 
 .st-dropzone {
   display: grid;
@@ -654,13 +643,13 @@ body.st-resizing iframe { pointer-events: none; }
 .st-linkrow button { height: 38px; padding: 0 15px; border: 1px solid var(--st-line); border-radius: 10px; background: var(--st-bg); font-size: 14px; }
 .st-linkrow button:hover:not(:disabled) { border-color: var(--st-accent); color: var(--st-accent); }
 
-.st-context-block { margin-top: 28px; }
-.st-context-block h2 { display: flex; align-items: baseline; gap: 7px; margin: 0 0 11px; color: var(--st-muted); font-size: 14px; font-weight: 620; }
-.st-context-block h2 span { color: var(--st-muted-soft); font-size: 13px; font-weight: 400; }
+.st-context-block { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--st-line); }
+.st-context-block h2 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 12px; color: var(--st-ink); font-size: 16px; font-weight: 680; }
+.st-context-block h2 span { color: var(--st-muted); font-size: 13px; font-weight: 500; }
 .st-context-empty { margin: 0; color: var(--st-muted-soft); font-size: 13.5px; }
 
 .st-doc-list { display: grid; gap: 7px; }
-.st-doc { display: grid; gap: 9px; padding: 14px 16px; border: 1px solid var(--st-line); border-radius: 12px; background: var(--st-panel); }
+.st-doc { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--st-line); border-radius: 12px; background: var(--st-panel); }
 .st-doc.is-primary { border-color: var(--st-accent); }
 .st-doc-main { display: grid; min-width: 0; gap: 2px; }
 .st-doc-main strong { overflow: hidden; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }

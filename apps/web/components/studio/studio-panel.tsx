@@ -1,25 +1,34 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { ClipIcon, CloseIcon, ExitIcon, NewIcon, PanelIcon, SendIcon, StopIcon } from "@/components/studio/icons";
+import {
+  ClipIcon,
+  CloseIcon,
+  ExitIcon,
+  LayersIcon,
+  NewIcon,
+  PanelIcon,
+  SendIcon,
+  StopIcon,
+} from "@/components/studio/icons";
 import { ModelPicker } from "@/components/studio/model-picker";
 import { ReportMarkdown } from "@/components/studio/report-markdown";
-import { parsePrompt } from "@/lib/studio/command";
+import { REPORT_COMMAND, parsePrompt } from "@/lib/studio/command";
 import { cx } from "@/lib/studio/cx";
-import { materialsWord } from "@/lib/studio/materials";
 import type { LuraModel, RunMode, StudioDocument, StudioMessage, ToolTrace } from "@/lib/studio/types";
 
 /**
  * Обсуждение — правая колонка.
  *
  * Здесь разговор с Lura: переписка и поле ввода. Короткий ответ живёт здесь
- * целиком, отчёт открывается в центре. Список разборов переехал в левую
- * колонку, к материалам и файлам проекта: он про проект, а не про разговор.
+ * целиком, отчёт открывается в центре. Список разборов и файлы проекта — в
+ * левой колонке: они про проект, а не про разговор.
  *
- * Над полем ввода всегда видно, на каких материалах Lura будет отвечать.
- * Пустое дерево файлов ничего не говорит о её доступе к данным, а переоценить
- * этот доступ — значит поверить ответу, у которого нет опоры.
+ * Полный разбор включается кнопкой «Разбор» у поля ввода, а материалы, на
+ * которых Lura отвечает, открываются кнопкой в шапке. Про состав материалов
+ * говорит первая строка переписки: переоценить доступ агента к данным — значит
+ * поверить ответу, у которого нет опоры.
  */
 
 export type ComposerAttachment = { name: string; mimeType: string; data: string; text?: string };
@@ -92,6 +101,7 @@ type Props = {
   onStop: () => void;
   onCollapse: () => void;
   onNewThread: () => void;
+  onOpenMaterials: () => void;
 };
 
 export function StudioPanel({
@@ -113,12 +123,14 @@ export function StudioPanel({
   onStop,
   onCollapse,
   onNewThread,
+  onOpenMaterials,
 }: Props) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
-  const [showSources, setShowSources] = useState(false);
-  const sourcesId = useId();
+  /* Полный разбор включается подписанной кнопкой у поля ввода: команду
+     «/lur manager-dev start» нельзя ни запомнить, ни набрать без ошибки. */
+  const [report, setReport] = useState(false);
 
   const fileInput = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
@@ -174,9 +186,12 @@ export function StudioPanel({
   function send() {
     const prompt = value.trim();
     if (!prompt || busy) return;
-    onSend(prompt, attachments);
+    onSend(report ? `${REPORT_COMMAND} ${prompt}` : prompt, attachments);
     setValue("");
     setAttachments([]);
+    /* Режим разбора снимается после отправки: он стоит минут работы, и
+       случайно уехать в него следующим вопросом нельзя. */
+    setReport(false);
     if (area.current) area.current.style.height = "auto";
   }
 
@@ -185,10 +200,10 @@ export function StudioPanel({
   const greeting = !loaded
     ? null
     : !materials
-      ? "Добавьте материалы и укажите, что хотите выяснить. Сейчас источники для анализа не выбраны."
+      ? "Материалов пока нет. Загрузите их кнопкой «Материалы» в шапке — и спрашивайте по ним."
       : !sources.length
-        ? "Отметьте материалы слева и укажите, что хотите выяснить. Сейчас источники для анализа не выбраны."
-        : "Спросите о выбранных материалах — короткий ответ придёт сюда. Разбор с отчётом запускается кнопкой «Начать разбор» в центре.";
+        ? "Ни один материал не отмечен для ответов. Отметьте нужные в «Материалах»."
+        : `Спросите по материалам (${sources.length} из ${materials}) — ответ придёт сюда. Для отчёта включите «Разбор» у поля ввода.`;
 
   return (
     <section className="st-panel" aria-label="Обсуждение">
@@ -205,6 +220,15 @@ export function StudioPanel({
             data-tip="Новый разговор · Ctrl N"
           >
             <NewIcon />
+          </button>
+          <button
+            type="button"
+            className="st-act"
+            onClick={onOpenMaterials}
+            aria-label="Материалы: файлы и ссылки для ответов"
+            data-tip="Материалы"
+          >
+            <LayersIcon />
           </button>
           <button
             type="button"
@@ -311,40 +335,13 @@ export function StudioPanel({
           </p>
         ) : null}
 
-        <div className="st-context-bar">
-          <button
-            type="button"
-            className="st-context-toggle"
-            aria-expanded={showSources}
-            aria-controls={sourcesId}
-            onClick={() => setShowSources((open) => !open)}
-          >
-            Источники для ответа:{" "}
-            <b>{sources.length ? `${sources.length} ${materialsWord(sources.length)}` : "не выбраны"}</b>
-          </button>
-          <div id={sourcesId} className="st-context-list" hidden={!showSources}>
-            {sources.length ? (
-              <ul>
-                {sources.map((document) => (
-                  <li key={document.id}>{document.title}</li>
-                ))}
-              </ul>
-            ) : (
-              <p>Lura ответит без ваших материалов — только на общих знаниях и найденном в интернете.</p>
-            )}
-            <p className="st-context-hint">
-              Выбор меняется галочками в «Материалах» слева. Вложения к сообщению уходят только с ним.
-            </p>
-          </div>
-        </div>
-
-        <div className="st-composer-box">
+        <div className={cx("st-composer-box", report && "is-report")}>
           <textarea
             ref={area}
             value={value}
             rows={1}
-            placeholder="Спросите Lura"
-            aria-label="Сообщение для Lura"
+            placeholder={report ? "Что разобрать? Например: как встретили релиз 5.2" : "Спросите Lura"}
+            aria-label={report ? "Что разобрать" : "Сообщение для Lura"}
             onChange={(event) => {
               setValue(event.target.value);
               const element = event.target;
@@ -395,6 +392,17 @@ export function StudioPanel({
               data-tip="Приложить к сообщению"
             >
               <ClipIcon />
+            </button>
+
+            <button
+              type="button"
+              className={cx("st-mode", report && "is-on")}
+              onClick={() => setReport((on) => !on)}
+              disabled={busy}
+              aria-pressed={report}
+              data-tip="Полный разбор с отчётом, несколько минут"
+            >
+              Разбор
             </button>
 
             <span className="st-composer-gap" />

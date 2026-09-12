@@ -8,18 +8,15 @@ import { FileTabs } from "@/components/studio/file-tabs";
 import { FileView } from "@/components/studio/file-view";
 import { PanelIcon } from "@/components/studio/icons";
 import { StudioContext } from "@/components/studio/studio-context";
-import { StudioMaterials } from "@/components/studio/studio-materials";
 import { StudioPanel, type ComposerAttachment } from "@/components/studio/studio-panel";
 import { StudioReport } from "@/components/studio/studio-report";
-import { StudioStart } from "@/components/studio/studio-start";
 import { StudioThreads } from "@/components/studio/studio-threads";
-import { REPORT_COMMAND, parsePrompt, titleFrom } from "@/lib/studio/command";
+import { parsePrompt, titleFrom } from "@/lib/studio/command";
 import { cx } from "@/lib/studio/cx";
-import { MATERIAL_MAX_BYTES, MATERIAL_MAX_LABEL, type MaterialUpload } from "@/lib/studio/materials";
+import { MATERIAL_MAX_BYTES, MATERIAL_MAX_LABEL } from "@/lib/studio/materials";
 import type {
   LuraModel,
   RunMode,
-  StudioDocument,
   StudioMessage,
   StudioNode,
   StudioThread,
@@ -97,8 +94,6 @@ export function StudioScreen() {
   const [announce, setAnnounce] = useState("");
 
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const [uploads, setUploads] = useState<MaterialUpload[]>([]);
-  const [recent, setRecent] = useState<string[]>([]);
   const [focusMaterial, setFocusMaterial] = useState<{ id: string; token: number } | null>(null);
 
   /* Вкладки открытых файлов, активная вкладка и те, где есть несохранённая
@@ -144,9 +139,6 @@ export function StudioScreen() {
     const body = (await response.json()) as { thread: StudioThread };
     setThread(body.thread);
     setError(null);
-    /* «Материалы готовы» — подтверждение только что законченной загрузки.
-       Стоит уйти в разбор и вернуться, как оно устаревает. */
-    setRecent([]);
     /* Открывая разбор, показываем его последний отчёт: он и есть результат.
        Если в треде только разговор, он открывается в обсуждении. */
     const last = [...body.thread.messages].reverse().find(isReport);
@@ -234,56 +226,41 @@ export function StudioScreen() {
     });
   }
 
-  async function uploadOne(item: MaterialUpload, asBusiness: boolean) {
-    const fail = (message: string) =>
-      setUploads((current) =>
-        current.map((upload) => (upload.key === item.key ? { ...upload, state: "failed", error: message } : upload)),
-      );
-
-    setUploads((current) =>
-      current.map((upload) => (upload.key === item.key ? { ...upload, state: "working", error: undefined } : upload)),
-    );
-    setAnnounce(`Загружаем «${item.name}»`);
-
-    if (item.file.size > MATERIAL_MAX_BYTES) {
-      fail(`Файл больше ${MATERIAL_MAX_LABEL}. Разбейте выгрузку на части или сократите период.`);
-      return;
-    }
-
-    const form = new FormData();
-    form.append("files", item.file);
-    form.append("kind", asBusiness ? "business" : "source");
-
-    try {
-      const response = await fetch("/api/studio/documents", { method: "POST", body: form });
-      const body = (await response.json().catch(() => null)) as
-        | { error?: string; documents?: StudioDocument[] }
-        | null;
-      if (!response.ok) {
-        fail(body?.error ?? "Сервер не принял файл.");
-        return;
-      }
-      setUploads((current) => current.filter((upload) => upload.key !== item.key));
-      setRecent((current) => [...current, ...(body?.documents ?? []).map((document) => document.title)]);
-      setAnnounce(`«${item.name}» загружен и готов к разбору`);
-      await refresh();
-    } catch {
-      fail("Нет связи с сервером. Проверьте интернет и повторите.");
-    }
-  }
-
-  /* Файлы идут по одному: у каждого своя строка со своим исходом, и сорвавшийся
-     пятый не хоронит четыре загруженных. */
+  /* Файлы идут по одному: сорвавшийся пятый не хоронит четыре загруженных, а
+     про каждый отказ сказано, с каким файлом он случился. */
   async function uploadMaterials(files: File[], asBusiness = false) {
     setError(null);
-    const items: MaterialUpload[] = files.map((file) => ({
-      key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: file.name,
-      state: "working",
-      file,
-    }));
-    setUploads((current) => [...current, ...items]);
-    for (const item of items) await uploadOne(item, asBusiness);
+    const problems: string[] = [];
+
+    for (const file of files) {
+      setAnnounce(`Загружаем «${file.name}»`);
+      if (file.size > MATERIAL_MAX_BYTES) {
+        problems.push(`«${file.name}» больше ${MATERIAL_MAX_LABEL}`);
+        continue;
+      }
+
+      const form = new FormData();
+      form.append("files", file);
+      form.append("kind", asBusiness ? "business" : "source");
+
+      try {
+        const response = await fetch("/api/studio/documents", { method: "POST", body: form });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) {
+          problems.push(`«${file.name}»: ${body?.error ?? "сервер не принял файл"}`);
+          continue;
+        }
+        setAnnounce(`«${file.name}» загружен и готов к работе`);
+      } catch {
+        problems.push(`«${file.name}»: нет связи с сервером`);
+      }
+    }
+
+    await refresh();
+    if (problems.length) {
+      setError(`Не загрузились: ${problems.join("; ")}.`);
+      setAnnounce("");
+    }
   }
 
   async function uploadUrl(url: string, asBusiness: boolean) {
@@ -294,14 +271,13 @@ export function StudioScreen() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, kind: asBusiness ? "business" : "source" }),
     });
-    const body = (await response.json().catch(() => null)) as { error?: string; documents?: StudioDocument[] } | null;
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
     if (!response.ok) {
       setError(body?.error ?? "Ссылка не загрузилась.");
       setAnnounce("");
       return;
     }
-    setRecent((current) => [...current, ...(body?.documents ?? []).map((document) => document.title)]);
-    setAnnounce("Страница загружена и готова к разбору");
+    setAnnounce("Страница загружена и готова к работе");
     await refresh();
   }
 
@@ -319,7 +295,6 @@ export function StudioScreen() {
     setActiveTab(node.id);
     setView("file");
     setPane("main");
-    setRecent([]);
   }, []);
 
   /* Дерево перечитано: вкладки берут из него новые имена и отметки времени, а
@@ -424,7 +399,6 @@ export function StudioScreen() {
     setLive({ text: "", tools: [], mode: null });
     if (!current?.id) setPending(report ? titleFrom(prompt) : null);
     if (report) {
-      setRecent([]);
       setView("report");
       setPane("main");
     }
@@ -559,8 +533,6 @@ export function StudioScreen() {
   }
 
   const fileOnScreen = view === "file" && activeTab !== null;
-  /* Пока в центре начало работы, загрузки показывает оно, а не левая колонка. */
-  const startVisible = view !== "context" && !fileOnScreen && live?.mode !== "report" && !shown;
   const lastQuestion = questionOf([...messages].reverse().find((message) => message.role === "user"));
   const shownQuestion = (() => {
     if (!shown) return "";
@@ -579,6 +551,8 @@ export function StudioScreen() {
         key={focusMaterial?.token ?? 0}
         focus={focusMaterial?.id ?? null}
         documents={documents}
+        excluded={excluded}
+        onToggle={toggleSource}
         busy={busy}
         onUpload={(files, asBusiness) => uploadMaterials(files, asBusiness)}
         onUploadUrl={uploadUrl}
@@ -621,25 +595,22 @@ export function StudioScreen() {
       />
     );
   } else {
+    /* Пустой центр объясняет, чем он станет, и даёт следующий шаг: без этого
+       белое поле на полэкрана читается как незагрузившаяся страница. */
     center = (
-      <StudioStart
-        documents={documents}
-        loaded={loaded}
-        excluded={excluded}
-        uploads={uploads}
-        recent={recent}
-        busy={busy}
-        ready={workspace.runtime.ready}
-        onUpload={(files) => void uploadMaterials(files)}
-        onRetry={(key) => {
-          const item = uploads.find((upload) => upload.key === key);
-          if (item) void uploadOne(item, false);
-        }}
-        onDismiss={(key) => setUploads((current) => current.filter((upload) => upload.key !== key))}
-        onToggle={toggleSource}
-        onManage={() => openMaterials(null)}
-        onStart={(question) => void run(`${REPORT_COMMAND} ${question}`, [], true)}
-      />
+      <div className="st-idle">
+        <div className="st-idle-inner">
+          <h1>{documents.length ? "Отчёт появится здесь" : "Начните с материалов"}</h1>
+          <p>
+            {documents.length
+              ? "Спросите Lura в обсуждении справа. Для полного разбора с отчётом включите «Разбор» у поля ввода."
+              : "Загрузите отзывы, релиз-ноуты или выгрузку метрик — Lura ответит по ним и соберёт отчёт с основаниями."}
+          </p>
+          <button type="button" className="st-btn st-btn-primary" onClick={() => openMaterials(null)}>
+            {documents.length ? "Открыть материалы" : "Загрузить материалы"}
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -676,23 +647,6 @@ export function StudioScreen() {
         </div>
 
         <div className="st-side-scroll">
-          <StudioMaterials
-            documents={documents}
-            loaded={loaded}
-            excluded={excluded}
-            uploads={uploads}
-            onToggle={toggleSource}
-            onUpload={(files) => void uploadMaterials(files)}
-            onRetry={(key) => {
-              const item = uploads.find((upload) => upload.key === key);
-              if (item) void uploadOne(item, false);
-            }}
-            onDismiss={(key) => setUploads((current) => current.filter((upload) => upload.key !== key))}
-            onOpen={(id) => openMaterials(id)}
-            onManage={() => openMaterials(null)}
-            showUploads={!startVisible}
-          />
-
           <StudioThreads
             threads={workspace.threads}
             active={thread?.id || null}
@@ -792,6 +746,7 @@ export function StudioScreen() {
         onStop={() => abort.current?.abort()}
         onCollapse={() => setPanelOpen(false)}
         onNewThread={newAnalysis}
+        onOpenMaterials={() => openMaterials(null)}
       />
 
       {/* Свёрнутую колонку нужно чем-то вернуть: кнопка, которая её прячет,

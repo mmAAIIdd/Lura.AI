@@ -1,9 +1,12 @@
-/* Рабочее пространство: колонка проекта, начало работы, ход разбора, обсуждение.
+/* Рабочее пространство: колонка проекта, центр, обсуждение.
 
-   Слой поверх studio.css. Здесь кнопки одной системы, подсказки, разделы
-   левой колонки и экран начала работы. Шкала отступов — 8, 12, 16, 24, 32;
-   основной текст 16/24, подписи 14/20, заголовок состояния 24/32. Залитая
-   кнопка на экране одна — кнопка текущего шага. */
+   Слой поверх studio.css: кнопки одной системы, подсказки, разделы левой
+   колонки, шапка разбора и пустой центр. Шкала отступов — 8, 12, 16, 24, 32;
+   основной текст 16/24, подписи 14/20, заголовок состояния 24/32.
+
+   Границы здесь видимые, а не намёком: три колонки без отчёркнутых краёв и с
+   почти одинаковым фоном сливались в одно светлое поле, и глазу не за что
+   было зацепиться. */
 
 /* ---------- Кнопки ---------- */
 
@@ -28,11 +31,8 @@
 .st-btn-block { width: 100%; }
 .st-btn-lg { min-height: 44px; padding: 0 24px; font-size: 16px; }
 .st-btn-primary { border-color: var(--st-accent); background: var(--st-accent); color: #ffffff; }
-.st-btn-primary:hover:not(:disabled):not(.is-unavailable) { border-color: #1550bd; background: #1550bd; }
-.st-btn-secondary:hover:not(:disabled) { border-color: var(--st-accent); color: var(--st-accent); }
-/* Недоступная главная кнопка остаётся в обходе с клавиатуры, а причина написана
-   рядом: отключённая кнопка молча выпадает из фокуса и ничего не объясняет. */
-.st-btn-primary.is-unavailable { border-color: var(--st-sunken); background: var(--st-sunken); color: var(--st-muted); cursor: not-allowed; }
+.st-btn-primary:hover:not(:disabled) { border-color: #1550bd; background: #1550bd; }
+.st-btn-secondary:hover:not(:disabled) { border-color: var(--st-accent); color: var(--st-accent); background: var(--st-accent-soft); }
 
 .st-link {
   padding: 0;
@@ -44,6 +44,24 @@
   text-underline-offset: 3px;
 }
 .st-link:hover { color: #1550bd; }
+
+/* Переключатель режима у поля ввода: подписан словом, а не значком. */
+.st-mode {
+  display: inline-flex;
+  min-height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--st-line);
+  border-radius: 999px;
+  background: var(--st-bg);
+  color: var(--st-muted);
+  font-size: 13px;
+  font-weight: 620;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.st-mode:hover:not(:disabled) { border-color: var(--st-accent); color: var(--st-accent); }
+.st-mode.is-on { border-color: var(--st-accent); background: var(--st-accent); color: #ffffff; }
 
 /* ---------- Подсказки ----------
 
@@ -95,36 +113,40 @@
 
 .st-side-top {
   display: flex;
-  height: 56px;
+  height: 52px;
   align-items: center;
   gap: 8px;
   padding: 0 16px;
+  border-bottom: 1px solid var(--st-line);
   font-size: 16px;
   font-weight: 680;
   letter-spacing: -.02em;
 }
-.st-side-top .st-brand-logo { width: 24px; height: 24px; flex: 0 0 auto; color: var(--st-accent); }
+.st-side-top .st-brand-logo { width: 22px; height: 22px; flex: 0 0 auto; color: var(--st-accent); }
 
-.st-side-scroll { min-height: 0; overflow-y: auto; padding-bottom: 24px; }
+.st-side-scroll { min-height: 0; overflow-y: auto; padding-bottom: 16px; }
 
-.st-side-section { border-top: 1px solid var(--st-line); }
+.st-side-section + .st-side-section { border-top: 1px solid var(--st-line); }
 
+/* Шапка раздела — светлее содержимого и с чертой снизу: без этого разделы
+   читались одним длинным списком. */
 .st-side-head {
   position: sticky;
   top: 0;
   z-index: 2;
   display: flex;
-  min-height: 48px;
+  min-height: 44px;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px 4px 4px;
+  padding: 2px 8px 2px 4px;
+  border-bottom: 1px solid var(--st-line-soft);
   background: var(--st-panel);
 }
-.st-side-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 14px; font-weight: 680; line-height: 20px; }
+.st-side-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .01em; line-height: 18px; }
 .st-side-title button {
   display: flex;
   width: 100%;
-  min-height: 40px;
+  min-height: 36px;
   align-items: center;
   gap: 4px;
   padding: 0 4px;
@@ -144,8 +166,8 @@
 .st-side-actions { display: flex; flex: 0 0 auto; gap: 4px; }
 .st-side-icon {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 0;
   border-radius: 8px;
@@ -155,87 +177,9 @@
 .st-side-icon:hover:not(:disabled) { background: var(--st-hover); color: var(--st-ink); }
 .st-side-icon svg { width: 18px; height: 18px; stroke-width: 2; }
 
-.st-side-body { padding: 0 12px 16px; }
-.st-side-note { margin: 8px 0 0; color: var(--st-muted); font-size: 12.5px; line-height: 18px; }
-.st-side-empty { margin: 8px 4px 0; color: var(--st-muted); font-size: 13px; line-height: 20px; }
+.st-side-body { padding: 8px 10px 12px; }
+.st-side-empty { margin: 4px 4px 0; color: var(--st-muted); font-size: 13px; line-height: 20px; }
 
-/* ---------- Материалы ---------- */
-
-.st-materials { border-radius: 12px; }
-.st-materials.is-over { outline: 2px dashed var(--st-accent); outline-offset: 4px; }
-
-.st-sources { display: grid; gap: 2px; margin: 12px 0 0; padding: 0; list-style: none; }
-.st-source { display: flex; min-height: 40px; align-items: center; gap: 8px; padding: 0 4px 0 8px; border-radius: 8px; }
-.st-source:hover { background: var(--st-hover); }
-.st-source input,
-.st-start-sources input { width: 18px; height: 18px; flex: 0 0 auto; margin: 0; accent-color: var(--st-accent); cursor: pointer; }
-.st-source label {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 0;
-  font-size: 14px;
-  line-height: 20px;
-  cursor: pointer;
-}
-.st-source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.st-badge {
-  flex: 0 0 auto;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--st-accent-soft);
-  color: var(--st-accent);
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 18px;
-}
-.st-source-open {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--st-muted);
-}
-.st-source-open:hover { background: var(--st-sunken); color: var(--st-ink); }
-.st-source-open svg { width: 16px; height: 16px; stroke-width: 2.25; }
-
-.st-uploads { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
-.st-upload { display: grid; gap: 8px; padding: 8px 12px; border: 1px solid var(--st-line); border-radius: 10px; background: var(--st-bg); }
-.st-upload.is-working { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
-.st-upload.is-failed { border-color: #f3c6c2; background: #fdf3f2; }
-.st-upload-text { display: grid; min-width: 0; gap: 2px; font-size: 13px; line-height: 18px; }
-.st-upload-text b { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.st-upload-text span { color: var(--st-muted); }
-.st-upload.is-failed .st-upload-text span { color: var(--st-danger); }
-.st-upload-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; }
-.st-upload-close {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  margin-left: auto;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--st-muted);
-}
-.st-upload-close svg { width: 14px; height: 14px; stroke-width: 2.6; }
-
-.st-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--st-line);
-  border-top-color: var(--st-accent);
-  border-radius: 50%;
-  animation: st-spin .8s linear infinite;
-}
-@keyframes st-spin { to { transform: rotate(360deg); } }
 @keyframes st-pulse { 50% { opacity: .3; } }
 
 /* ---------- Разборы ---------- */
@@ -261,7 +205,7 @@
 .st-runs { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .st-run { display: flex; align-items: center; border-radius: 8px; }
 .st-run:hover { background: var(--st-hover); }
-.st-run.is-active { background: var(--st-accent-soft); }
+.st-run.is-active { background: var(--st-accent-soft); box-shadow: inset 2px 0 0 var(--st-accent); }
 .st-run-open {
   display: grid;
   min-width: 0;
@@ -274,7 +218,7 @@
   font: inherit;
   text-align: left;
 }
-.st-run-title { overflow: hidden; font-size: 14px; font-weight: 540; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.st-run-title { overflow: hidden; font-size: 14px; font-weight: 560; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
 .st-run-meta { display: flex; align-items: center; gap: 8px; color: var(--st-muted); font-size: 12px; line-height: 16px; }
 .st-run-status { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
 .st-run-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -312,7 +256,7 @@
 
 /* ---------- Файлы проекта ---------- */
 
-.st-tree-root { min-height: 32px; color: var(--st-muted); font-size: 13px; font-weight: 600; }
+.st-tree-root { min-height: 30px; color: var(--st-muted); font-size: 12.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; }
 .st-tree-root.is-target { color: var(--st-accent); }
 .st-tree-main { min-height: 32px; }
 
@@ -358,88 +302,18 @@
   white-space: nowrap;
 }
 
-/* ---------- Начало работы ---------- */
+/* ---------- Материалы: галочка «использовать в ответах» ---------- */
 
-/* safe center, а не margin: auto: карточка выше окна при обычном центрировании
-   обрезается сверху, и прокрутить к её началу нечем. */
-.st-start {
-  display: grid;
-  height: 100%;
-  min-height: 0;
-  align-content: safe center;
-  justify-items: center;
-  overflow-y: auto;
-  padding: 32px 24px;
-}
-.st-start-loading { margin: 0; color: var(--st-muted); font-size: 14px; }
-
-.st-start-card {
-  display: grid;
-  width: min(100%, 640px);
-  align-content: start;
-  justify-items: start;
-  gap: 16px;
-  padding: 32px;
-  border: 1px solid var(--st-line);
-  border-radius: 16px;
-  background: var(--st-bg);
-  box-shadow: var(--st-lift);
-}
-.st-start-card.is-over { border-color: var(--st-accent); background: var(--st-accent-soft); }
-.st-start-card h1 { margin: 0; font-size: 24px; font-weight: 680; line-height: 32px; letter-spacing: -.02em; }
-.st-start-lead { margin: -8px 0 8px; color: var(--st-ink); font-size: 16px; line-height: 24px; }
-.st-start-caption { margin: 0; color: var(--st-muted); font-size: 14px; line-height: 20px; }
-.st-start-card .st-uploads { width: 100%; margin: 0; }
-.st-start-aside { width: 100%; margin: 0; padding-top: 16px; border-top: 1px solid var(--st-line-soft); color: var(--st-muted); font-size: 14px; line-height: 20px; }
-.st-start-aside + .st-start-aside { margin-top: -8px; padding-top: 0; border-top: 0; }
-
-.st-start-sources { width: 100%; margin: 0; padding: 12px 16px 16px; border: 1px solid var(--st-line); border-radius: 12px; }
-.st-start-sources legend { padding: 0 8px; font-size: 14px; font-weight: 640; line-height: 20px; }
-.st-start-sources legend span { color: var(--st-muted); font-weight: 500; }
-.st-start-sources ul { display: grid; margin: 0 0 8px; padding: 0; list-style: none; }
-.st-start-sources li { display: flex; min-height: 40px; align-items: center; gap: 12px; }
-.st-start-sources label { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 10px 0; font-size: 15px; line-height: 20px; cursor: pointer; }
-.st-start-sources .st-link { font-size: 14px; }
-.st-start-sources .st-uploads { margin-top: 12px; }
-
-.st-start-label { margin-bottom: -8px; font-size: 14px; font-weight: 640; line-height: 20px; }
-.st-start-question {
-  width: 100%;
-  min-height: 96px;
-  padding: 12px 16px;
-  border: 1px solid var(--st-line);
-  border-radius: 12px;
-  background: var(--st-bg);
-  color: var(--st-ink);
-  font: inherit;
-  font-size: 16px;
-  line-height: 24px;
-  resize: vertical;
-}
-.st-start-question::placeholder { color: var(--st-muted); }
-.st-start-question:focus { border-color: var(--st-accent); outline: none; box-shadow: var(--st-ring); }
-
-.st-start-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: -4px; color: var(--st-muted); font-size: 13px; }
-.st-example {
-  min-height: 32px;
-  padding: 6px 12px;
-  border: 1px solid var(--st-line);
-  border-radius: 999px;
-  background: var(--st-panel);
-  color: var(--st-ink);
-  font-size: 13px;
-  line-height: 18px;
-  text-align: left;
-}
-.st-example:hover { border-color: var(--st-accent); color: var(--st-accent); }
-
-.st-start-go { display: flex; width: 100%; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.st-start-reason { flex: 1 1 200px; margin: 0; color: var(--st-muted); font-size: 14px; line-height: 20px; }
-.st-start-reason.is-blocked { color: var(--st-ink); font-weight: 520; }
+.st-doc-pick { display: inline-flex; width: fit-content; align-items: center; gap: 8px; color: var(--st-ink); font-size: 13.5px; font-weight: 560; cursor: pointer; }
+.st-doc-pick input { width: 18px; height: 18px; margin: 0; accent-color: var(--st-accent); cursor: pointer; }
+/* Невыбранный материал виден, но приглушён: он есть, и его не используют. */
+.st-doc.is-off { background: var(--st-bg); }
+.st-doc.is-off .st-doc-main strong { color: var(--st-muted); }
+.st-doc.is-off .st-doc-pick { color: var(--st-muted); }
 
 /* ---------- Ход разбора и готовый отчёт ---------- */
 
-.st-task { display: grid; gap: 8px; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--st-line); }
+.st-task { display: grid; gap: 8px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 2px solid var(--st-line); }
 .st-task h1 { margin: 0; font-size: 24px; font-weight: 680; line-height: 32px; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .st-task-state {
   display: inline-flex;
@@ -455,9 +329,9 @@
 .st-task-state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .st-task-state.is-running { background: var(--st-accent-soft); color: var(--st-accent); }
 .st-task-state.is-running::before { animation: st-pulse 1.2s ease-in-out infinite; }
-.st-task-state.is-done { background: #e9f5ee; color: var(--st-ok); }
+.st-task-state.is-done { background: #dff1e6; color: var(--st-ok); }
 .st-task-status { margin: 0; color: var(--st-muted); font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
-.st-task-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.st-task-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 
 /* Только вертикальные отступы: по горизонтали блок центрирует .st-report-body. */
 .st-steps { margin-block: 0 24px; border: 1px solid var(--st-line); border-radius: 12px; background: var(--st-panel); }
@@ -474,7 +348,7 @@
 
 /* ---------- Обсуждение ---------- */
 
-.st-panel-title { margin: 0; font-size: 16px; font-weight: 680; line-height: 24px; letter-spacing: -.01em; }
+.st-panel-title { margin: 0; font-size: 15px; font-weight: 700; line-height: 22px; letter-spacing: .01em; }
 
 .st-said-kind,
 .st-reply-kind {
@@ -489,7 +363,7 @@
   font-weight: 640;
   line-height: 20px;
 }
-.st-reply-kind { margin: 0; background: #e9f5ee; color: var(--st-ok); }
+.st-reply-kind { margin: 0; background: #dff1e6; color: var(--st-ok); }
 
 .st-reply-report {
   display: grid;
@@ -508,29 +382,6 @@
 .st-reply-brief { font-size: 14px; line-height: 20px; }
 .st-reply-report .st-reply-more { margin: 0; color: var(--st-accent); font-size: 14px; font-weight: 600; }
 .st-reply-state { margin: 0; color: var(--st-muted); font-size: 14px; line-height: 20px; }
-
-.st-context-bar { margin: 0 0 8px; font-size: 13px; line-height: 18px; }
-.st-context-toggle {
-  display: inline-flex;
-  min-height: 32px;
-  align-items: center;
-  gap: 4px;
-  padding: 0 12px;
-  border: 1px solid var(--st-line);
-  border-radius: 999px;
-  background: var(--st-bg);
-  color: var(--st-muted);
-  font: inherit;
-  font-size: 13px;
-}
-.st-context-toggle b { color: var(--st-ink); font-weight: 600; }
-.st-context-toggle::after { content: "▾"; margin-left: 2px; font-size: 11px; }
-.st-context-toggle[aria-expanded="true"]::after { content: "▴"; }
-.st-context-toggle:hover { border-color: var(--st-accent); }
-.st-context-list { margin-top: 8px; padding: 12px; border: 1px solid var(--st-line); border-radius: 12px; background: var(--st-bg); }
-.st-context-list ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; }
-.st-context-list p { margin: 0; }
-.st-context-list .st-context-hint { margin-top: 8px; color: var(--st-muted); }
 
 .st-chips-label { color: var(--st-muted); font-size: 12.5px; }
 .st-picker-label { margin-right: 4px; color: var(--st-muted); }
@@ -552,8 +403,7 @@
 /* ---------- Узкий экран ----------
 
    Три колонки на телефоне не помещаются, а сжатые до сотни пикселей нечитаемы.
-   Колонки открываются по одной переключателем сверху; содержимое каждой
-   остаётся в полную ширину. */
+   Колонки открываются по одной переключателем сверху. */
 
 @media (max-width: 900px) {
   .st { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
@@ -594,7 +444,5 @@
   .st.no-panel .st-panel { overflow: visible; opacity: 1; pointer-events: auto; }
 
   .st-report-body,
-  .st-context { padding: 24px 16px 40px; }
-  .st-start { padding: 16px; }
-  .st-start-card { padding: 24px 16px; box-shadow: none; }
+  .st-context { padding: 20px 16px 40px; }
 }

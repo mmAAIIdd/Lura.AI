@@ -4,19 +4,24 @@ import { useEffect, useRef, useState } from "react";
 
 import type { StudioDocument } from "@/lib/studio/types";
 import { cx } from "@/lib/studio/cx";
+import { MATERIAL_ACCEPT, MATERIAL_FORMATS, MATERIAL_MAX_LABEL } from "@/lib/studio/materials";
 
 /**
- * Материалы целиком — то, из чего агент собирает контекст.
+ * Материалы — то, из чего агент собирает ответ.
  *
- * В левой колонке материалы видны списком с галочками; здесь то, что в колонку
- * не помещается: ссылка на страницу, документ о бизнесе, просмотр содержимого
- * и удаление.
+ * Здесь всё про них разом: загрузка файлов и ссылок, документ о бизнесе,
+ * просмотр содержимого, удаление и галочка «использовать в ответах». Галочка
+ * не украшение: снятая, она убирает материал из поиска, чтения и подсчётов
+ * агента — иначе экран обещал бы ответ по трём файлам, а он шёл бы по четырём.
  */
 
 type Props = {
   documents: StudioDocument[];
   /** Материал, который нужно сразу открыть на просмотр. */
   focus?: string | null;
+  /** Материалы со снятой галочкой: агент их не видит. */
+  excluded: ReadonlySet<string>;
+  onToggle: (id: string) => void;
   busy: boolean;
   onUpload: (files: File[], asBusiness: boolean) => Promise<void>;
   onUploadUrl: (url: string, asBusiness: boolean) => Promise<void>;
@@ -24,9 +29,17 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-const ACCEPT = ".txt,.md,.markdown,.csv,.tsv,.json,.log,.yaml,.yml,.xml,.html,.htm";
-
-export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, onMakeBusiness, onDelete }: Props) {
+export function StudioContext({
+  documents,
+  focus,
+  excluded,
+  onToggle,
+  busy,
+  onUpload,
+  onUploadUrl,
+  onMakeBusiness,
+  onDelete,
+}: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<{ title: string; text: string; truncated: boolean } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
@@ -85,7 +98,10 @@ export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, o
     <div className="st-context">
       <header className="st-context-head">
         <h1>Материалы</h1>
-        <p>Всё, на чём Lura строит разбор: файлы, ссылки на страницы и документ о бизнесе.</p>
+        <p>
+          Всё, на чём Lura строит ответ: файлы, ссылки на страницы и документ о бизнесе. Снятая галочка убирает
+          материал из поиска и подсчётов — агент его не увидит.
+        </p>
       </header>
 
       <section
@@ -104,7 +120,9 @@ export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, o
       >
         <div className="st-dropzone-main">
           <strong>Перетащите файлы сюда</strong>
-          <span>txt, md, csv, tsv, json, log, yaml, xml, html — до 4 МБ на файл</span>
+          <span>
+            {MATERIAL_FORMATS} — до {MATERIAL_MAX_LABEL} на файл
+          </span>
         </div>
 
         <div className="st-dropzone-actions">
@@ -122,7 +140,7 @@ export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, o
           type="file"
           multiple
           hidden
-          accept={ACCEPT}
+          accept={MATERIAL_ACCEPT}
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
             event.target.value = "";
@@ -155,7 +173,15 @@ export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, o
       <section className="st-context-block">
         <h2>Документ о бизнесе</h2>
         {business ? (
-          <DocumentRow document={business} primary onDelete={onDelete} onOpen={open} loading={loading === business.id} />
+          <DocumentRow
+            document={business}
+            primary
+            selected={!excluded.has(business.id)}
+            onToggle={onToggle}
+            onDelete={onDelete}
+            onOpen={open}
+            loading={loading === business.id}
+          />
         ) : (
           <p className="st-context-empty">
             Не загружен — Lura разбирает без контекста компании. Подойдёт описание компании, продукта, ролей
@@ -174,6 +200,8 @@ export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, o
               <DocumentRow
                 key={document.id}
                 document={document}
+                selected={!excluded.has(document.id)}
+                onToggle={onToggle}
                 onMakeBusiness={onMakeBusiness}
                 onDelete={onDelete}
                 onOpen={open}
@@ -192,6 +220,8 @@ export function StudioContext({ documents, focus, busy, onUpload, onUploadUrl, o
 function DocumentRow({
   document,
   primary,
+  selected,
+  onToggle,
   onMakeBusiness,
   onDelete,
   onOpen,
@@ -199,6 +229,8 @@ function DocumentRow({
 }: {
   document: StudioDocument;
   primary?: boolean;
+  selected: boolean;
+  onToggle: (id: string) => void;
   onMakeBusiness?: (id: string) => void;
   onDelete: (id: string) => void;
   onOpen: (id: string, title: string) => void;
@@ -212,11 +244,16 @@ function DocumentRow({
         : "вставленный текст";
 
   return (
-    <article className={cx("st-doc", primary && "is-primary")}>
+    <article className={cx("st-doc", primary && "is-primary", !selected && "is-off")}>
       <div className="st-doc-main">
         <strong title={document.title}>{document.title}</strong>
         <span title={origin}>{origin}</span>
       </div>
+
+      <label className="st-doc-pick">
+        <input type="checkbox" checked={selected} onChange={() => onToggle(document.id)} />
+        <span>Использовать в ответах</span>
+      </label>
 
       <div className="st-doc-facts">
         <span>{document.chars.toLocaleString("ru-RU")} символов</span>
