@@ -85,11 +85,34 @@ c("ALLOW", "main session (no agent_type) -> governance", { cwd: ROOT, tool_name:
 
 /* --- input robustness: unverifiable means denied --- */
 c("ALLOW", "non-write tool passes through", write("tester", abs("CLAUDE.md"), "Read"));
-c("ALLOW", "Bash is NOT intercepted (documented limitation)", { cwd: ROOT, agent_type: "implementer", tool_name: "Bash", tool_input: { command: "echo x > CLAUDE.md" } });
+c("DENY", "Bash naming CLAUDE.md is intercepted", { cwd: ROOT, agent_type: "implementer", tool_name: "Bash", tool_input: { command: "echo x > CLAUDE.md" } });
 c("DENY", "write with no path", { cwd: ROOT, agent_type: "implementer", tool_name: "Write", tool_input: {} });
 c("DENY", "malformed JSON payload", "not json at all");
 c("DENY", "MultiEdit is intercepted", write("tester", abs("apps/api/app/main.py"), "MultiEdit"));
 c("DENY", "NotebookEdit is intercepted", { cwd: ROOT, agent_type: "tester", tool_name: "NotebookEdit", tool_input: { notebook_path: abs("x.ipynb") } });
+
+/* --- shell: the control plane may not be NAMED by a restricted agent.
+       Each of these reaches governance while tool_name says "Bash". --- */
+const bash = (agent, command) => ({ cwd: ROOT, agent_type: agent, tool_name: "Bash", tool_input: { command } });
+c("DENY", "implementer bash -> sed -i CLAUDE.md", bash("implementer", "sed -i 's/x/y/' CLAUDE.md"));
+c("DENY", "implementer bash -> redirect into settings", bash("implementer", "echo '{}' > .claude/settings.json"));
+c("DENY", "implementer bash -> python writes the hook", bash("implementer", "python -c \"open('.claude/hooks/restrict-write-scope.mjs','w')\""));
+c("DENY", "implementer bash -> backslash path", bash("implementer", "echo x > .claude\\settings.json"));
+c("DENY", "implementer bash -> case variant", bash("implementer", "echo x > .CLAUDE/Settings.json"));
+c("DENY", "implementer bash -> skills-lock.json", bash("implementer", "rm skills-lock.json"));
+c("DENY", "tester bash -> Set-Content .mcp.json", bash("tester", "Set-Content .mcp.json '{}'"));
+c("DENY", "debugger bash -> reads its own policy", bash("debugger", "cat .claude/agents/debugger.md"));
+c("DENY", "bash with unreadable command", { cwd: ROOT, agent_type: "implementer", tool_name: "Bash", tool_input: {} });
+
+/* --- ...while the real workflow keeps working --- */
+c("ALLOW", "tester bash -> pytest", bash("tester", "cd apps/api && python -m pytest -q"));
+c("ALLOW", "tester bash -> ruff", bash("tester", "cd apps/api && python -m ruff check ."));
+c("ALLOW", "implementer bash -> npm run lint", bash("implementer", "cd apps/web && npm run lint"));
+c("ALLOW", "implementer bash -> npm run build", bash("implementer", "cd apps/web && npm run build"));
+c("ALLOW", "implementer bash -> edits product source", bash("implementer", "sed -i 's/a/b/' apps/api/app/main.py"));
+c("ALLOW", "debugger bash -> git diff", bash("debugger", "git diff -- apps/web/lib/studio/agent.ts"));
+c("ALLOW", "debugger bash -> docker compose logs", bash("debugger", "docker compose logs api"));
+c("ALLOW", "main session bash -> governance (policy, not enforcement)", { cwd: ROOT, tool_name: "Bash", tool_input: { command: "echo x > .claude/settings.json" } });
 
 /* --- frontmatter override still works (defence in depth) --- */
 c("DENY", "--only .claude/skills blocks apps/", write("skill-curator", abs("apps/x.ts")), ["--only", ".claude/skills"]);

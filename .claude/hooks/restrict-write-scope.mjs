@@ -27,6 +27,24 @@ import path from "node:path";
 const WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 
 /**
+ * Shell is a write tool too, and the Edit/Write guard cannot see it.
+ *
+ * `sed -i`, `> file`, `python -c "open(...).write(...)"`, `Set-Content` all reach the
+ * control plane while `tool_name` says "Bash". Trying to recognise *which* commands
+ * write is the losing version of this problem — a filter that catches `sed -i` and
+ * misses `Set-Content` is worse than none, because it gets trusted.
+ *
+ * So this does not try. A restricted agent has no legitimate reason to NAME a
+ * governance file in a shell command at all: reading one is what the Read tool is for.
+ * Denying the mention is blunt, over-denies rather than under-denies, and has no
+ * bypass to find — which is the opposite failure mode from pattern-matching writes.
+ */
+const SHELL_TOOLS = ["Bash"];
+
+/** Lower-cased because Windows paths are case-insensitive and so is this check. */
+const GOVERNANCE_TOKENS = [".claude", "claude.md", ".mcp.json", "skills-lock.json"];
+
+/**
  * The control plane: files that decide what agents may do.
  *
  * An agent able to edit these could rewrite the rules it runs under, so every
@@ -148,7 +166,8 @@ function denyInside(paths, projectDir, resolved, rawTarget) {
 
 function decide(payload, override) {
   const toolName = payload.tool_name ?? "";
-  if (!WRITE_TOOLS.includes(toolName)) return null;
+  const isShell = SHELL_TOOLS.includes(toolName);
+  if (!WRITE_TOOLS.includes(toolName) && !isShell) return null;
 
   /* Absent means the main session; present-but-unusable means a subagent whose identity
      could not be read. Those must not collapse into the same branch: treating a garbled
@@ -168,6 +187,26 @@ function decide(payload, override) {
   if (!rules) return null;
 
   const who = agentType ?? "this agent";
+
+  if (isShell) {
+    /* Every restricted agent gets the same shell rule regardless of its write mode:
+       naming the control plane in a command is refused. The main session was already
+       returned above, so this never blocks orchestration. */
+    const command = payload.tool_input?.command;
+    if (typeof command !== "string") {
+      return `${who}: Bash was called without a readable command, so its scope could not be verified.`;
+    }
+    const lowered = command.toLowerCase();
+    const named = GOVERNANCE_TOKENS.find((token) => lowered.includes(token));
+    if (named) {
+      return (
+        `${who} may not name governance configuration in a shell command (found "${named}"). ` +
+        `The shell can write any file, so the control plane is off-limits to it entirely — ` +
+        `use the Read tool to inspect these files, and escalate if one needs to change.`
+      );
+    }
+    return null;
+  }
 
   if (rules.mode === "none") {
     return (

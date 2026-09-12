@@ -153,20 +153,21 @@ as skipped. Distinguish verified evidence from inference from unknowns.
 | `security-auditor` | Read, Grep, Glob, Skill | nothing | **technical** — no write tool, no Bash |
 | `independent-advisor` | **none** | nothing | **technical** — `tools: []` |
 | `skill-curator` | Read, Grep, Glob, Edit, Write, Skill | `.claude/skills/**` only | **technical** — hook, and it has no Bash |
-| `implementer` | Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill | product code, never the control plane | **partial** — hook covers Edit/Write; Bash is policy |
-| `debugger` | Read, Grep, Glob, Bash, Skill | nothing | **partial** — no write tool; Bash is policy |
-| `tester` | Read, Grep, Glob, Bash, Skill | nothing | **partial** — no write tool; Bash is policy |
+| `implementer` | Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill | product code, never the control plane | **technical** — hook covers Edit/Write **and** Bash |
+| `debugger` | Read, Grep, Glob, Bash, Skill | nothing | **technical** — no write tool; Bash guarded |
+| `tester` | Read, Grep, Glob, Bash, Skill | nothing | **technical** — no write tool; Bash guarded |
 
-**Read the enforcement column literally.** The `PreToolUse` guard matches
-`Edit|Write|MultiEdit|NotebookEdit` and nothing else. An agent holding **Bash** can still
-write any file — `sed -i`, `> file`, `python -c`, `Set-Content` — and the guard never sees
-it. So for `implementer`, `debugger` and `tester` the write boundary is a rule they follow,
-not a wall they cannot cross. The four read-only agents and the advisor have no Bash, which
-is what makes their boundary real.
+**How the shell is covered.** `Bash` writes files too — `sed -i`, `> file`, `python -c`,
+`Set-Content` — and an Edit/Write matcher never sees it. Recognising *which* commands write
+is the losing version of that problem; a filter that catches `sed -i` and misses
+`Set-Content` is worse than none, because it gets trusted. So the guard does not try. It
+refuses any shell command from a restricted agent that **names** a governance path at all.
+Reading those files is what the Read tool is for, and no legitimate task needs the shell to
+mention them.
 
-Pattern-filtering Bash for writes was considered and rejected: a filter that catches
-`sed -i` but not `Set-Content` is worse than an honest limitation, because it invites trust
-it cannot hold.
+One honest edge: deny-by-mention is defeated by deliberately obfuscating the path
+(assembling it from variables). It stops mistakes and drift, which is the threat model
+here; it is not an adversary sandbox.
 
 **The control plane** is `.claude/**`, `CLAUDE.md`, `.mcp.json` and `skills-lock.json` —
 the files that decide what agents may do. No subagent may write any of them. Changing one
@@ -182,7 +183,9 @@ reported, not applied.
 
 It keeps one influence channel even so: skills are instructions injected into other agents'
 context, so the curator cannot change the rules but can change what the Implementer is
-told. Its only control there is human review of skill diffs.
+told. **Treat a skill diff as a change to agent behaviour, not to documentation**: route it
+through `reviewer` before accepting it, the same as code. That is the only control on this
+channel, and it is a policy one.
 
 > **Do not "fix" the advisor's tool line.** Claude Code 2.1.191 renders `tools: []` as
 > `(Tools: All tools)` in the Agent tool listing. That is a display bug in the version's
@@ -198,7 +201,7 @@ test commands and passes the output to them. That is why read-only is real here 
 than a promise.
 
 `.claude/hooks/restrict-write-scope.mjs` is a `PreToolUse` guard that denies an
-out-of-scope write before it happens, so the boundaries above are enforced by the runtime
+out-of-scope write, or a shell command naming the control plane, before it happens, so the boundaries above are enforced by the runtime
 rather than by instructions an agent could talk itself out of. Blocking the Implementer and
 Tester from `.claude/**` and `CLAUDE.md` matters most: it stops an agent from editing the
 approval gate it runs under.
@@ -216,16 +219,31 @@ An agent the policy table does not name still cannot touch the control plane, so
 agent cannot quietly add an escalation path. A payload whose `agent_type` is present but
 unreadable is treated as an unknown agent, never as the main session.
 
+`.claude/hooks/restrict-write-scope.test.mjs` holds 74 boundary cases — traversal, case
+variants, unknown and malformed identities, shell evasion, and the workflow commands that
+must keep working. **Run it after any change to the hook, the policy table, or an agent's
+tools:** `node .claude/hooks/restrict-write-scope.test.mjs`. It has caught two open
+boundaries and one stale expectation so far; a guard nobody re-tests is a guard nobody
+should trust.
+
 **The main session is the one boundary that is policy, not enforcement.** It has no
 `agent_type`, and Claude Code offers no way to sandbox it, so the Orchestrator *can* edit
 governance files. It must not do so outside an approved governance task.
 
-> ⚠️ **Hooks are snapshotted when a session starts.** Agent definitions hot-load into the
-> Agent tool listing mid-session, but their hooks do not. A session started before these
-> files existed runs with the guard inactive — verified the hard way: in such a session the
-> Implementer successfully appended to `CLAUDE.md`, while a fresh session blocked the same
-> write with the guard's own message. **After changing hooks or agents, restart Claude Code
-> before trusting the boundaries.**
+> ⚠️ **What reloads mid-session, and what does not.** Measured, not assumed:
+>
+> - The hook **script** is re-executed per call, so policy-table edits apply at once.
+> - The **`settings.json` registration reloads too** — adding `Bash` to the matcher took
+>   effect immediately, confirmed by a live subagent probe being refused by it.
+> - An agent's **`tools:`** reload — a spawned Tester reported the newly reduced set.
+> - A **frontmatter hook** does *not* reload. A session started before one existed runs
+>   without it; that is how an Implementer once appended to `CLAUDE.md` while a fresh
+>   session denied the identical write.
+> - **This file is snapshotted into each subagent's context at session start.** A subagent
+>   can therefore quote a policy row that no longer matches the file on disk — one did.
+>
+> So: policy and settings changes are live, but **restart before trusting a frontmatter
+> hook change or before quoting this file back at an agent.**
 
 ## 14. Local configuration layout
 
