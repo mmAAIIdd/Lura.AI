@@ -119,8 +119,17 @@ export function StudioScreen() {
   const refresh = useCallback(async () => {
     const response = await fetch("/api/studio/workspace", { cache: "no-store" });
     if (response.ok) {
-      setWorkspace((await response.json()) as WorkspaceState);
+      const next = (await response.json()) as WorkspaceState;
+      setWorkspace(next);
       setLoaded(true);
+      /* Снятая галочка удалённого материала хранится в браузере вечно и копит
+         мусор: как только материала нет в списке, забываем и про неё. */
+      setExcluded((current) => {
+        if (!current.size) return current;
+        const alive = new Set(next.documents.map((document) => document.id));
+        const kept = [...current].filter((id) => alive.has(id));
+        return kept.length === current.size ? current : new Set(kept);
+      });
       return;
     }
     /* Молча пустое пространство выглядит как «материалов нет», хотя на самом
@@ -135,6 +144,9 @@ export function StudioScreen() {
     const body = (await response.json()) as { thread: StudioThread };
     setThread(body.thread);
     setError(null);
+    /* «Материалы готовы» — подтверждение только что законченной загрузки.
+       Стоит уйти в разбор и вернуться, как оно устаревает. */
+    setRecent([]);
     /* Открывая разбор, показываем его последний отчёт: он и есть результат.
        Если в треде только разговор, он открывается в обсуждении. */
     const last = [...body.thread.messages].reverse().find(isReport);
@@ -307,6 +319,7 @@ export function StudioScreen() {
     setActiveTab(node.id);
     setView("file");
     setPane("main");
+    setRecent([]);
   }, []);
 
   /* Дерево перечитано: вкладки берут из него новые имена и отметки времени, а
@@ -546,6 +559,8 @@ export function StudioScreen() {
   }
 
   const fileOnScreen = view === "file" && activeTab !== null;
+  /* Пока в центре начало работы, загрузки показывает оно, а не левая колонка. */
+  const startVisible = view !== "context" && !fileOnScreen && live?.mode !== "report" && !shown;
   const lastQuestion = questionOf([...messages].reverse().find((message) => message.role === "user"));
   const shownQuestion = (() => {
     if (!shown) return "";
@@ -675,6 +690,7 @@ export function StudioScreen() {
             onDismiss={(key) => setUploads((current) => current.filter((upload) => upload.key !== key))}
             onOpen={(id) => openMaterials(id)}
             onManage={() => openMaterials(null)}
+            showUploads={!startVisible}
           />
 
           <StudioThreads

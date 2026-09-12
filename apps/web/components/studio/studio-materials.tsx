@@ -32,6 +32,8 @@ type Props = {
   onDismiss: (key: string) => void;
   onOpen: (id: string) => void;
   onManage: () => void;
+  /** Начало работы показывает загрузки само — в двух местах разом они путают. */
+  showUploads?: boolean;
 };
 
 export function StudioMaterials({
@@ -45,6 +47,7 @@ export function StudioMaterials({
   onDismiss,
   onOpen,
   onManage,
+  showUploads = true,
 }: Props) {
   const picker = useRef<HTMLInputElement>(null);
   const [dropping, setDropping] = useState(false);
@@ -98,7 +101,7 @@ export function StudioMaterials({
           </button>
         </p>
 
-        {uploads.length ? (
+        {showUploads && uploads.length ? (
           <ul className="st-uploads">
             {uploads.map((upload) => (
               <UploadRow
@@ -141,7 +144,7 @@ export function StudioMaterials({
               </li>
             ))}
           </ul>
-        ) : loaded && !uploads.length ? (
+        ) : loaded && !(showUploads && uploads.length) ? (
           <p className="st-side-empty">
             Пока пусто. Загрузите отзывы, релиз-ноуты или выгрузку метрик — то, что нужно разобрать.
           </p>
