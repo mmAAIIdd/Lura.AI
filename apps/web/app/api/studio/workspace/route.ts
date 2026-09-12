@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireStudioOwner } from "@/lib/studio/auth";
 import { LURA_MODELS, geminiKey } from "@/lib/studio/config";
 import { currentProvider } from "@/lib/studio/search";
 import { StorageUnavailableError, listDocuments, listThreads, storageIsEphemeral, storeLabel } from "@/lib/studio/store";
@@ -9,6 +10,9 @@ export const dynamic = "force-dynamic";
 
 /** Всё, что нужно рабочему пространству при открытии: документы, треды, готовность. */
 export async function GET() {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   let documents: Awaited<ReturnType<typeof listDocuments>>;
   let threads: Awaited<ReturnType<typeof listThreads>>;
   try {

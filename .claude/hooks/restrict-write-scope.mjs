@@ -3,23 +3,21 @@
  * PreToolUse write-scope guard for Lura's developer agents.
  *
  * Claude Code 2.1.191 restricts an agent's *tools* in frontmatter but not the *paths*
- * those tools may write to, and permission rules in settings.json are session-global.
- * This hook supplies the missing per-agent path boundary.
+ * those tools may write to, and `permissions.allow`/`deny` in settings.json are
+ * session-global rather than per-agent. This hook supplies the missing per-agent
+ * boundary, keyed on `agent_type` from the PreToolUse payload.
  *
- * It runs in two registrations, deliberately:
- *
- *   1. From .claude/settings.json with no arguments. The policy is then looked up from
- *      `agent_type` in the hook payload. This registration is the authoritative one —
- *      it covers every agent from a single place that does not depend on any agent file
- *      still carrying its own hook.
- *   2. From an agent's own frontmatter with explicit --only/--except arguments, as
- *      defence in depth. Stripping one layer leaves the other standing, and the
- *      skill-curator can write to .claude/agents/, so one layer is not enough.
+ * Registered twice on purpose:
+ *   1. In .claude/settings.json with no arguments — the authoritative registration.
+ *      It covers every agent from one place that does not depend on any agent file
+ *      still carrying a hook of its own.
+ *   2. In a write-capable agent's frontmatter with explicit --only/--except arguments,
+ *      as defence in depth. Stripping one layer leaves the other standing.
  *
  *   --only <prefix>    deny any write outside <prefix>
  *   --except <prefix>  deny any write inside <prefix>
  *
- * Both are repo-relative and repeatable. With no arguments the table below applies.
+ * Both are repo-relative and repeatable. With no arguments the POLICY table applies.
  *
  * Contract: PreToolUse JSON on stdin, a deny decision on stdout, exit 0 either way —
  * the decision travels in the JSON, not the status code.
@@ -28,30 +26,84 @@ import path from "node:path";
 
 const WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 
-// Governance files. Any agent allowed to edit these could rewrite the approval gate
-// it runs under, so only the skill-curator reaches them, and only via --only.
-const GOVERNANCE = [".claude", "CLAUDE.md"];
+/**
+ * The control plane: files that decide what agents may do.
+ *
+ * An agent able to edit these could rewrite the rules it runs under, so every
+ * restricted agent is kept out of all of them. `.mcp.json` and `skills-lock.json`
+ * belong here for the same reason as `.claude/` — one re-enables a remote MCP
+ * server, the other decides which vendor skills get installed.
+ */
+const GOVERNANCE = [".claude", "CLAUDE.md", ".mcp.json", "skills-lock.json"];
+
+/**
+ * Governance paths that sit OUTSIDE the skill-curator's own area.
+ *
+ * The curator's `only` root already denies each of these, so this list is
+ * belt-and-braces: if the root is ever widened, the control plane stays shut.
+ * `.claude/skills` is deliberately absent — that is the curator's actual job.
+ */
+const GOVERNANCE_BEYOND_SKILLS = [
+  ".claude/settings.json",
+  ".claude/settings.local.json",
+  ".claude/hooks",
+  ".claude/agents",
+  "CLAUDE.md",
+  ".mcp.json",
+  "skills-lock.json",
+];
+
+/** Writes nothing, ever. Used for agents whose role is read-only. */
+const READ_ONLY = { mode: "none" };
+
+/** Writes product code, but never the control plane. */
+const PRODUCT_ONLY = { mode: "except", paths: GOVERNANCE };
 
 const POLICY = {
-  "skill-curator": { only: [".claude"], except: [] },
-  implementer: { only: [], except: GOVERNANCE },
-  tester: { only: [], except: GOVERNANCE },
-  // These have no write tools at all; the entry is belt-and-braces in case that changes.
-  architect: { only: [], except: GOVERNANCE },
-  debugger: { only: [], except: GOVERNANCE },
-  reviewer: { only: [], except: GOVERNANCE },
-  "security-auditor": { only: [], except: GOVERNANCE },
-  "independent-advisor": { only: ["\u0000never"], except: [] },
+  // The only agent that writes application source.
+  implementer: PRODUCT_ONLY,
+
+  // Maintains the project skill library and nothing else. Cannot reach its own
+  // tool list, the hook that restrains it, the settings, or the orchestration policy.
+  "skill-curator": {
+    mode: "only",
+    roots: [".claude/skills"],
+    except: GOVERNANCE_BEYOND_SKILLS,
+  },
+
+  // Read-only by role. Most of these also have no Edit/Write tool at all; the entry
+  // is the second layer, so a future frontmatter edit cannot silently grant writes.
+  architect: READ_ONLY,
+  debugger: READ_ONLY,
+  reviewer: READ_ONLY,
+  "security-auditor": READ_ONLY,
+  tester: READ_ONLY,
+  "independent-advisor": READ_ONLY,
 };
 
+/**
+ * Any agent this table does not name still cannot touch the control plane.
+ *
+ * Built-in agents (general-purpose, Explore, Plan, …) legitimately write product
+ * files, so defaulting them to READ_ONLY would break ordinary work. Defaulting them
+ * to PRODUCT_ONLY keeps the escalation path shut without that cost.
+ */
+const UNKNOWN_AGENT = PRODUCT_ONLY;
+
+// String.fromCharCode(92) is a backslash; writing it literally here has proven
+// fragile through the shell heredocs used to generate this file.
+const BACKSLASH = String.fromCharCode(92);
+
 function parseArgs(argv) {
-  const only = [];
+  const roots = [];
   const except = [];
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === "--only" && argv[i + 1]) only.push(argv[++i]);
+    if (argv[i] === "--only" && argv[i + 1]) roots.push(argv[++i]);
     else if (argv[i] === "--except" && argv[i + 1]) except.push(argv[++i]);
   }
-  return only.length || except.length ? { only, except } : null;
+  if (roots.length > 0) return { mode: "only", roots, except };
+  if (except.length > 0) return { mode: "except", paths: except };
+  return null;
 }
 
 function isInside(root, target) {
@@ -59,23 +111,24 @@ function isInside(root, target) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-/**
- * Segment-level fallback for the --except direction.
- *
- * The repository path contains spaces and Cyrillic, and the payload has been observed
- * carrying a differently-encoded project prefix. If that prefix does not match,
- * path.relative() reports "outside", which is safe for --only (denies) but would fail
- * OPEN for --except. The guarded names are ASCII, so matching them as path segments
- * survives any mangling of the prefix ahead of them.
- */
-// String.fromCharCode(92) is a backslash; writing it literally here has proven
-// fragile through the shell heredocs used to generate this file.
-const BACKSLASH = String.fromCharCode(92);
-
 function splitPath(value) {
   return value.split(BACKSLASH).join("/").split("/").filter(Boolean);
 }
 
+/**
+ * Segment-level match against the RAW, unnormalised target.
+ *
+ * This exists only as a fail-CLOSED fallback for the deny direction. The repository
+ * path contains spaces and Cyrillic, and the payload has been observed carrying a
+ * differently-encoded project prefix; when that prefix does not match,
+ * path.relative() reports "outside", which would let a denied path through. The
+ * guarded names are ASCII, so matching them as segments survives prefix mangling.
+ *
+ * It must NEVER be used to grant access. Against a raw path, `.claude/skills/../..`
+ * still contains the segments `.claude` and `skills`, so using this to satisfy an
+ * `only` root would hand back exactly the traversal escape the resolver prevents.
+ * Deny-only is the invariant that makes it safe.
+ */
 function matchesSegment(prefix, target) {
   const segments = splitPath(target);
   const wanted = splitPath(prefix);
@@ -86,47 +139,82 @@ function matchesSegment(prefix, target) {
   return false;
 }
 
+function denyInside(paths, projectDir, resolved, rawTarget) {
+  for (const p of paths) {
+    if (isInside(path.resolve(projectDir, p), resolved) || matchesSegment(p, rawTarget)) return p;
+  }
+  return null;
+}
+
 function decide(payload, override) {
   const toolName = payload.tool_name ?? "";
   if (!WRITE_TOOLS.includes(toolName)) return null;
 
-  const agentType = payload.agent_type ?? null;
-  // No arguments and no known agent: this is the main session (the System Orchestrator),
-  // which coordinates rather than being sandboxed. Agent-scoped rules do not apply.
-  const rules = override ?? (agentType ? POLICY[agentType] : null);
+  /* Absent means the main session; present-but-unusable means a subagent whose identity
+     could not be read. Those must not collapse into the same branch: treating a garbled
+     agent_type as "no agent" would hand it the unsandboxed main-session path. */
+  const declaresAgent = payload.agent_type !== undefined && payload.agent_type !== null;
+  const agentType =
+    typeof payload.agent_type === "string" && payload.agent_type.length > 0
+      ? payload.agent_type
+      : null;
+
+  /* No override and no agent field at all: the main session acting as System
+     Orchestrator. Claude Code offers no way to sandbox the main session, so that is a
+     documented policy-level boundary rather than a technical one — see CLAUDE.md. */
+  const rules =
+    override ??
+    (agentType ? (POLICY[agentType] ?? UNKNOWN_AGENT) : declaresAgent ? UNKNOWN_AGENT : null);
   if (!rules) return null;
 
-  const input = payload.tool_input ?? {};
-  const target = input.file_path ?? input.notebook_path ?? input.path;
-  const projectDir = process.env.CLAUDE_PROJECT_DIR || payload.cwd || process.cwd();
-  const who = agentType ? `${agentType}` : "this agent";
+  const who = agentType ?? "this agent";
 
-  if (!target) {
+  if (rules.mode === "none") {
+    return (
+      `${who} is a read-only agent and may not write any file. Blocked ${toolName}. ` +
+      `Report what needs to change and let the implementer make the change.`
+    );
+  }
+
+  const input = payload.tool_input ?? {};
+  const rawTarget = input.file_path ?? input.notebook_path ?? input.path;
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || payload.cwd || process.cwd();
+
+  if (typeof rawTarget !== "string" || rawTarget.length === 0) {
     return `${who}: ${toolName} was called without a resolvable file path, so its write scope could not be verified.`;
   }
 
-  const resolved = path.resolve(projectDir, target);
+  const resolved = path.resolve(projectDir, rawTarget);
 
-  if (rules.only.length > 0) {
-    const ok = rules.only.some(
-      (p) => isInside(path.resolve(projectDir, p), resolved) || matchesSegment(p, target)
-    );
-    if (!ok) {
+  if (rules.mode === "only") {
+    /* Resolver only — deliberately NOT matchesSegment. See its comment: a raw-segment
+       match here would let `.claude/skills/../../apps` satisfy a `.claude/skills` root.
+       If the project prefix is mangled, isInside reports "outside" and this denies,
+       which is the correct direction to fail. */
+    const inScope = rules.roots.some((p) => isInside(path.resolve(projectDir, p), resolved));
+    if (!inScope) {
       return (
-        `${who} may only write under ${rules.only.join(" or ")}. Blocked ${toolName} on "${target}". ` +
+        `${who} may only write under ${rules.roots.join(" or ")}. Blocked ${toolName} on "${rawTarget}". ` +
         `Report the change that is needed instead of making it — another agent owns that area.`
       );
     }
-  }
-
-  for (const p of rules.except) {
-    if (isInside(path.resolve(projectDir, p), resolved) || matchesSegment(p, target)) {
+    const hit = denyInside(rules.except ?? [], projectDir, resolved, rawTarget);
+    if (hit) {
       return (
-        `${who} may not write under ${p}. Blocked ${toolName} on "${target}". ` +
-        `Agent and skill configuration is the skill-curator's area, and changing it here ` +
-        `would let an agent rewrite the rules it runs under. Escalate instead.`
+        `${who} may not write ${hit}: it is governance configuration, and an agent that ` +
+        `can edit it can rewrite the rules it runs under. Blocked ${toolName} on "${rawTarget}".`
       );
     }
+    return null;
+  }
+
+  const hit = denyInside(rules.paths, projectDir, resolved, rawTarget);
+  if (hit) {
+    return (
+      `${who} may not write under ${hit}: that is the agent control plane, and changing it ` +
+      `here would let an agent rewrite the rules it runs under. Blocked ${toolName} on ` +
+      `"${rawTarget}". Governance changes need explicit user approval.`
+    );
   }
 
   return null;

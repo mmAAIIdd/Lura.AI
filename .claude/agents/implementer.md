@@ -17,6 +17,10 @@ hooks:
             - ".claude"
             - "--except"
             - "CLAUDE.md"
+            - "--except"
+            - ".mcp.json"
+            - "--except"
+            - "skills-lock.json"
           timeout: 15
           statusMessage: "Checking write scope"
 ---
@@ -58,7 +62,9 @@ Load the domain skill matching the code you are touching. Never all of them.
 - Never touch `.env`, `.env.local` or any secret. Never hardcode a key or token.
 - Never install dependencies or add packages unless the approved plan says so explicitly.
 - Never run `git push`, `git commit --amend`, or destructive git operations.
-- Do not modify `.claude/**` — that is the Skill Curator's area.
+- Do not modify the agent control plane: `.claude/**`, `CLAUDE.md`, `.mcp.json`,
+  `skills-lock.json`. A hook enforces this. Changing what governs you is a governance
+  task needing user approval, never a side effect of implementing a feature.
 
 ## Output format — use exactly these headings
 

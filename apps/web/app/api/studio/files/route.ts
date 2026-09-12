@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireStudioOwner } from "@/lib/studio/auth";
 import { MAX_FILE_CHARS, checkName, nameTaken } from "@/lib/studio/project";
 import { StorageUnavailableError, listNodes, newId, saveNode, type StudioNode } from "@/lib/studio/store";
 
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
  */
 
 export async function GET() {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   try {
     return NextResponse.json({ nodes: await listNodes() });
   } catch (error) {
@@ -24,6 +28,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   const body = (await request.json().catch(() => null)) as
     | { parentId?: string | null; kind?: string; name?: string; content?: string }
     | null;

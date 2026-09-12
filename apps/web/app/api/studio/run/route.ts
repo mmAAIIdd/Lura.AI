@@ -1,4 +1,5 @@
 import { runAgent, type Attachment } from "@/lib/studio/agent";
+import { requireStudioOwner } from "@/lib/studio/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,11 @@ export const maxDuration = 300;
  * ищет и что открывает. Иначе двухминутный разбор выглядит как зависший экран.
  */
 export async function POST(request: Request) {
+  /* Проверка идёт до чтения тела и до открытия потока: отказ в SSE выглядит
+     для клиента как оборвавшийся разбор, а не как отказ в доступе. */
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   const body = (await request.json().catch(() => null)) as
     | { threadId?: string; prompt?: string; model?: string; attachments?: Attachment[]; sources?: unknown }
     | null;

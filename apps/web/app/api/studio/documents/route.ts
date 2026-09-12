@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireStudioOwner } from "@/lib/studio/auth";
 import { LIMITS } from "@/lib/studio/config";
 import { fetchPublic } from "@/lib/studio/net";
 import { indexDocument } from "@/lib/studio/rag";
@@ -41,10 +42,16 @@ async function store(
 }
 
 export async function GET() {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   return NextResponse.json({ documents: await listDocuments() });
 }
 
 export async function POST(request: Request) {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   try {
     return await handleUpload(request);
   } catch (error) {

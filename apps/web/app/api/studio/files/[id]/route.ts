@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireStudioOwner } from "@/lib/studio/auth";
 import { MAX_FILE_CHARS, checkName, descendants, nameTaken } from "@/lib/studio/project";
 import { StorageUnavailableError, deleteNode, listNodes, readNodeContent, saveNode } from "@/lib/studio/store";
 import type { StudioNode } from "@/lib/studio/store";
@@ -21,6 +22,9 @@ async function withStore<T>(run: () => Promise<T>): Promise<T | NextResponse> {
 }
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   const { id } = await context.params;
   return withStore(async () => {
     const node = (await listNodes()).find((item) => item.id === id);
@@ -31,6 +35,9 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   const { id } = await context.params;
   const body = (await request.json().catch(() => null)) as { content?: string } | null;
   if (!body || typeof body.content !== "string") return fail("Ожидается поле content.", 400);
@@ -48,6 +55,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   const { id } = await context.params;
   const body = (await request.json().catch(() => null)) as { name?: string; parentId?: string | null } | null;
   if (!body) return fail("Тело запроса не разобралось.", 400);
@@ -87,6 +97,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(_: Request, context: { params: Promise<{ id: string }> }) {
+  const owner = await requireStudioOwner();
+  if ("denied" in owner) return owner.denied;
+
   const { id } = await context.params;
   return withStore(async () => {
     const nodes = await listNodes();

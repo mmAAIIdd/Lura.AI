@@ -146,16 +146,43 @@ as skipped. Distinguish verified evidence from inference from unknowns.
 
 ## 13. The agent roster and what each may touch
 
-| Agent | Tools | Can write? |
-|---|---|---|
-| `architect` | Read, Grep, Glob, Skill | no |
-| `implementer` | Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill | application code; **not** `.claude/**` or `CLAUDE.md` (hook) |
-| `debugger` | Read, Grep, Glob, Bash, Skill | no (diagnosis only) |
-| `tester` | Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill | tests; **not** `.claude/**` or `CLAUDE.md` (hook) |
-| `reviewer` | Read, Grep, Glob, Skill | no — no Bash at all |
-| `security-auditor` | Read, Grep, Glob, Skill | no — no Bash at all |
-| `skill-curator` | Read, Grep, Glob, Edit, Write, Skill | `.claude/**` only (hook) |
-| `independent-advisor` | **none** | no |
+| Agent | Tools | Write scope | Enforcement |
+|---|---|---|---|
+| `architect` | Read, Grep, Glob, Skill | nothing | **technical** — no write tool, no Bash |
+| `reviewer` | Read, Grep, Glob, Skill | nothing | **technical** — no write tool, no Bash |
+| `security-auditor` | Read, Grep, Glob, Skill | nothing | **technical** — no write tool, no Bash |
+| `independent-advisor` | **none** | nothing | **technical** — `tools: []` |
+| `skill-curator` | Read, Grep, Glob, Edit, Write, Skill | `.claude/skills/**` only | **technical** — hook, and it has no Bash |
+| `implementer` | Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill | product code, never the control plane | **partial** — hook covers Edit/Write; Bash is policy |
+| `debugger` | Read, Grep, Glob, Bash, Skill | nothing | **partial** — no write tool; Bash is policy |
+| `tester` | Read, Grep, Glob, Bash, Skill | nothing | **partial** — no write tool; Bash is policy |
+
+**Read the enforcement column literally.** The `PreToolUse` guard matches
+`Edit|Write|MultiEdit|NotebookEdit` and nothing else. An agent holding **Bash** can still
+write any file — `sed -i`, `> file`, `python -c`, `Set-Content` — and the guard never sees
+it. So for `implementer`, `debugger` and `tester` the write boundary is a rule they follow,
+not a wall they cannot cross. The four read-only agents and the advisor have no Bash, which
+is what makes their boundary real.
+
+Pattern-filtering Bash for writes was considered and rejected: a filter that catches
+`sed -i` but not `Set-Content` is worse than an honest limitation, because it invites trust
+it cannot hold.
+
+**The control plane** is `.claude/**`, `CLAUDE.md`, `.mcp.json` and `skills-lock.json` —
+the files that decide what agents may do. No subagent may write any of them. Changing one
+is a governance task: Advisor review where material, then explicit user approval, then a
+run carried out under that approval.
+
+`tester` writes nothing on purpose. A validator that can edit what it validates is not
+independent; when a test is missing it names the gap and the Implementer writes it.
+
+`skill-curator` is confined to `.claude/skills/**` so it cannot reach its own tool list,
+the hook that restrains it, or the settings. Agent-definition changes it identifies are
+reported, not applied.
+
+It keeps one influence channel even so: skills are instructions injected into other agents'
+context, so the curator cannot change the rules but can change what the Implementer is
+told. Its only control there is human review of skill diffs.
 
 > **Do not "fix" the advisor's tool line.** Claude Code 2.1.191 renders `tools: []` as
 > `(Tools: All tools)` in the Agent tool listing. That is a display bug in the version's
@@ -181,12 +208,17 @@ It is registered **twice, on purpose**:
 1. In `.claude/settings.json` with no arguments — the authoritative registration. The hook
    reads `agent_type` from the PreToolUse payload and applies its own policy table, so it
    covers every agent from one place that does not depend on any agent file still carrying
-   a hook.
+   a hook of its own.
 2. In each write-capable agent's frontmatter with explicit `--only` / `--except` arguments
-   — defence in depth. The Skill Curator can write to `.claude/agents/`, so a single layer
-   is not enough: stripping one leaves the other standing.
+   — defence in depth. Stripping one layer leaves the other standing.
 
-The main session (the Orchestrator) has no `agent_type` and is not sandboxed by it.
+An agent the policy table does not name still cannot touch the control plane, so adding an
+agent cannot quietly add an escalation path. A payload whose `agent_type` is present but
+unreadable is treated as an unknown agent, never as the main session.
+
+**The main session is the one boundary that is policy, not enforcement.** It has no
+`agent_type`, and Claude Code offers no way to sandbox it, so the Orchestrator *can* edit
+governance files. It must not do so outside an approved governance task.
 
 > ⚠️ **Hooks are snapshotted when a session starts.** Agent definitions hot-load into the
 > Agent tool listing mid-session, but their hooks do not. A session started before these

@@ -83,6 +83,28 @@ function restoreSameOriginHeader(request: NextRequest): Headers | null {
 }
 
 /**
+ * Hands the request on to the application with that repair applied.
+ *
+ * The repair used to be its own early return, and that return sat above
+ * getClaims: a POST carrying `Origin: null` and `Sec-Fetch-Site: same-origin`
+ * — two headers curl sets as easily as a browser does — left middleware
+ * without ever reaching the authentication check. Sec-Fetch-Site is proof of
+ * *provenance* and only inside a browser; it is never proof of identity, so it
+ * must not be able to decide who gets in. Routing the repair through the
+ * response that continues onwards keeps the pre-hydration form POST working
+ * while every request still passes through getClaims below.
+ *
+ * Rebuilt on each call rather than captured once, because `setAll` writes the
+ * refreshed session onto `request.cookies` — a copy of the headers taken
+ * earlier would carry the stale cookie into the page.
+ */
+function passThrough(request: NextRequest): NextResponse {
+  const headers = restoreSameOriginHeader(request);
+  if (!headers) return NextResponse.next({ request });
+  return NextResponse.next({ request: { headers } });
+}
+
+/**
  * Refreshes the Supabase session on every request and decides who may see what.
  *
  * The token has to be refreshed here because Server Components cannot write
@@ -93,10 +115,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // so the page itself can render the setup error rather than redirect-looping.
   if (!isSupabaseConfigured()) return NextResponse.next({ request });
 
-  const restoredHeaders = restoreSameOriginHeader(request);
-  if (restoredHeaders) return NextResponse.next({ request: { headers: restoredHeaders } });
-
-  let supabaseResponse = NextResponse.next({ request });
+  let supabaseResponse = passThrough(request);
   const { url, publishableKey } = readSupabaseConfig();
 
   const supabase = createServerClient(url, publishableKey, {
@@ -106,7 +125,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       },
       setAll(cookiesToSet, headers) {
         for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
-        supabaseResponse = NextResponse.next({ request });
+        supabaseResponse = passThrough(request);
         for (const { name, value, options } of cookiesToSet) {
           supabaseResponse.cookies.set(name, value, options);
         }
@@ -118,9 +137,11 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   });
 
   // Nothing may run between createServerClient and getClaims: an early return
-  // here would skip the refresh and log people out at random. getClaims (not
-  // getSession) is what makes this trustworthy — it verifies the JWT signature
-  // against the project's published keys.
+  // here would skip the refresh and log people out at random. An early return
+  // anywhere *above* is worse still — it skips the authorization branches
+  // below, which is why header repair now travels with the response instead of
+  // replacing it. getClaims (not getSession) is what makes this trustworthy —
+  // it verifies the JWT signature against the project's published keys.
   const { data } = await supabase.auth.getClaims();
   const signedIn = Boolean(data?.claims);
   const { pathname, search } = request.nextUrl;

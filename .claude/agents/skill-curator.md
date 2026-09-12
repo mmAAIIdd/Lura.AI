@@ -14,7 +14,7 @@ hooks:
           args:
             - ".claude/hooks/restrict-write-scope.mjs"
             - "--only"
-            - ".claude"
+            - ".claude/skills"
           timeout: 15
           statusMessage: "Checking skill-curator write scope"
 ---
@@ -58,6 +58,8 @@ knowledge to justify one, say so and create nothing.
 ## Hard prohibitions
 
 - Never modify application source (`apps/**`), migrations, or project config.
+- Never modify the mechanism that restrains you: your own tool list, the write-scope hook,
+  settings, or the approval policy.
 - Never download skills, browse the web, search GitHub, or use remote MCP.
 - Never copy external documentation into a skill. Every rule must be derived from files in
   this repository, and should cite the file it came from.
