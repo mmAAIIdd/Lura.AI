@@ -78,8 +78,13 @@ ehthumbs.db
 desktop.ini
 
 # ---------------------------------------------------------------------------
-# Vendored agent skill packs. Reinstallable from skills-lock.json, and
-# .claude/skills mirrors .agents/skills, so committing both duplicates ~6 MB.
+# Vendored agent skill packs downloaded from GitHub. Reinstallable from
+# skills-lock.json, ~6 MB, and not read by Claude Code (it only loads
+# .claude/skills). Nothing in the developer-agent system depends on them.
 # ---------------------------------------------------------------------------
 .agents/skills/
-.claude/skills/
+
+# .claude/skills/ is deliberately NOT ignored: it holds the project-local Lura
+# skills that the developer agents in .claude/agents/ load, and they have to
+# travel with the repository. Only settings.local.json stays machine-local.
+# ---------------------------------------------------------------------------
