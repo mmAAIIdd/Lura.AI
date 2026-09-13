@@ -68,6 +68,89 @@ function sql(): postgres.Sql {
 }
 
 /**
+ * Почему отказ на первом обращении к базе разбирается по коду ошибки.
+ *
+ * `create extension if not exists vector` — первый оператор, который вообще
+ * доходит до сервера. Значит, в этот catch попадает не только «pgvector не
+ * включён», а всё, что случается по дороге: неверный пароль, несуществующая
+ * база, недоступный хост, потерянное имя DNS. Раньше все они получали один
+ * ярлык — «расширение не включено» — и живой человек ушёл включать его в
+ * Database → Extensions, где всё и так было в порядке: на деле он вставил
+ * строку подключения Supabase, не убрав квадратные скобки вокруг пароля.
+ * Настоящая причина была только в скобках после текста сообщения.
+ *
+ * Отсюда правило: называть ровно ту причину, которую подтверждает код ошибки,
+ * и не выдумывать причину там, где кода нет. Код лежит в error.code: у
+ * серверных ошибок это SQLSTATE, у транспортных — errno Node или собственный
+ * код postgres (CONNECT_TIMEOUT). Исходный текст ошибки остаётся в скобках во
+ * всех ветках — именно он и позволил разобраться в том случае.
+ */
+type SchemaFailure = "auth" | "database" | "transport" | "extension" | "unknown";
+
+function failureCode(error: unknown): string {
+  if (typeof error !== "object" || error === null) return "";
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code.toUpperCase() : "";
+}
+
+function classifySchemaFailure(error: unknown): SchemaFailure {
+  switch (failureCode(error)) {
+    /* invalid_password, invalid_authorization_specification */
+    case "28P01":
+    case "28000":
+      return "auth";
+    /* invalid_catalog_name */
+    case "3D000":
+      return "database";
+    case "ENOTFOUND":
+    case "ECONNREFUSED":
+    case "ETIMEDOUT":
+    case "CONNECT_TIMEOUT":
+      return "transport";
+    /* insufficient_privilege, feature_not_supported и undefined_file —
+       расширения нет на сервере или его не даёт поставить роль. Это и есть
+       настоящий случай «pgvector недоступен», единственный. */
+    case "42501":
+    case "0A000":
+    case "58P01":
+      return "extension";
+    default:
+      return "unknown";
+  }
+}
+
+export function describeSchemaFailure(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+
+  switch (classifySchemaFailure(error)) {
+    case "auth":
+      return (
+        `База отклонила пользователя или пароль из STUDIO_DATABASE_URL (${detail}). ` +
+        "Обычно причина одна из двух: в строке остались квадратные скобки из шаблона " +
+        "(пароль вставлен как [password]) либо спецсимволы пароля не приведены к " +
+        "percent-кодировке."
+      );
+    case "database":
+      return (
+        `Базы с таким именем на сервере нет (${detail}). ` +
+        "Имя базы — это последний сегмент STUDIO_DATABASE_URL, после «/»; у Supabase это postgres."
+      );
+    case "transport":
+      return (
+        `Сервер базы недоступен по адресу из STUDIO_DATABASE_URL (${detail}). ` +
+        "Проверьте хост и порт: у transaction pooler Supabase это 6543, а не 5432."
+      );
+    case "extension":
+      return (
+        `Расширение pgvector не включено и не создаётся автоматически (${detail}). ` +
+        "Включите его в Supabase: Database → Extensions → vector."
+      );
+    case "unknown":
+      return `Не удалось подготовить хранилище Studio (${detail}).`;
+  }
+}
+
+/**
  * Схема создаётся при первом обращении и только один раз за процесс.
  *
  * Весь DDL идемпотентный, поэтому отдельного шага миграции для одного
@@ -83,11 +166,7 @@ async function ensureSchema(): Promise<void> {
     try {
       await db.unsafe("create extension if not exists vector");
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new StorageUnavailableError(
-        `Расширение pgvector не включено и не создаётся автоматически (${detail}). ` +
-          "Включите его в Supabase: Database → Extensions → vector.",
-      );
+      throw new StorageUnavailableError(describeSchemaFailure(error));
     }
 
     await db.unsafe(`
