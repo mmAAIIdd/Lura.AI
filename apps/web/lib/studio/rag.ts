@@ -1,6 +1,6 @@
 import { LIMITS } from "@/lib/studio/config";
 import { embedTexts } from "@/lib/studio/gemini";
-import { saveChunks, searchChunks, updateDocument } from "@/lib/studio/store";
+import type { StudioStore } from "@/lib/studio/store";
 import { splitIntoChunks } from "@/lib/studio/text";
 
 /**
@@ -14,11 +14,16 @@ import { splitIntoChunks } from "@/lib/studio/text";
  * Если эмбеддинги недоступны (нет ключа, кончилась квота), документ всё равно
  * индексируется — поиск переключается на слова. Тихо остаться без поиска по
  * своим же документам хуже, чем искать грубее.
+ *
+ * Хранилище приходит параметром, а не берётся отсюда само: оно привязано к
+ * владельцу запроса, и взять его глобально значило бы искать не по тем
+ * документам. Первым параметром — по общему соглашению из store/contract.ts.
  */
 
 export type Excerpt = { documentId: string; title: string; text: string; score: number };
 
 export async function indexDocument(
+  store: StudioStore,
   documentId: string,
   title: string,
   text: string,
@@ -27,8 +32,8 @@ export async function indexDocument(
   const vectors = await embedTexts(chunks, "RETRIEVAL_DOCUMENT");
   const usable = vectors && vectors.length === chunks.length ? vectors : null;
 
-  await saveChunks(documentId, title, chunks, usable);
-  await updateDocument(documentId, { chunks: chunks.length, indexed: usable ? "embeddings" : "keywords" });
+  await store.saveChunks(documentId, title, chunks, usable);
+  await store.updateDocument(documentId, { chunks: chunks.length, indexed: usable ? "embeddings" : "keywords" });
 
   return { chunks: chunks.length, vectors: Boolean(usable) };
 }
@@ -42,6 +47,7 @@ export async function indexDocument(
  * документов, с которыми работает команда, это приемлемо.
  */
 export async function searchDocuments(
+  store: StudioStore,
   query: string,
   limit = LIMITS.autoContextChunks,
   only?: ReadonlySet<string> | null,
@@ -49,8 +55,8 @@ export async function searchDocuments(
   if (only && !only.size) return [];
   const embedded = await embedTexts([query], "RETRIEVAL_QUERY");
   const vector = embedded?.[0] ?? null;
-  if (!only) return searchChunks({ text: query, vector }, limit);
-  const hits = await searchChunks({ text: query, vector }, limit * 6);
+  if (!only) return store.searchChunks({ text: query, vector }, limit);
+  const hits = await store.searchChunks({ text: query, vector }, limit * 6);
   return hits.filter((hit) => only.has(hit.documentId)).slice(0, limit);
 }
 

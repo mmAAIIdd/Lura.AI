@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { studioDir } from "@/lib/studio/config";
+import type { OwnerId } from "@/lib/studio/owner";
 import {
   StorageUnavailableError,
   type ChunkHit,
@@ -21,6 +22,11 @@ import { newId } from "@/lib/studio/store/ids";
  * Документ — это .txt рядом с .json, тред — один .json. Формат читается
  * глазами и переживает перезапуск, а поднимать Postgres под локальное
  * рабочее пространство одной команды незачем.
+ *
+ * Владелец разделяется каталогом: .lura-studio/<owner>/documents и так далее.
+ * Это самая честная изоляция из возможных здесь — чужие файлы не отфильтрованы,
+ * их просто нет по пути, который знает экземпляр хранилища. Забытый фильтр не
+ * может открыть чужой документ, потому что фильтра нет вовсе.
  */
 
 type Paths = {
@@ -44,26 +50,21 @@ function paths(root: string): Paths {
 }
 
 /**
- * Проверка папки на пригодность.
+ * Проверка базовой папки на пригодность.
  *
  * Одного mkdir мало: он проходит и там, где потом падает запись, а на
  * бессерверной площадке каталог приложения вообще не существует и ошибка
- * приходит как ENOENT, а не как EROFS. Поэтому после создания папок сюда же
+ * приходит как ENOENT, а не как EROFS. Поэтому после создания папки сюда же
  * пишется и удаляется пробный файл — это единственный надёжный ответ на
  * вопрос «можно ли здесь хранить состояние».
  */
-async function usable(root: string): Promise<Paths | null> {
-  const dirs = paths(root);
+async function usable(base: string): Promise<string | null> {
   try {
-    await Promise.all(
-      [dirs.root, dirs.documents, dirs.index, dirs.threads, dirs.artifacts, dirs.project].map((dir) =>
-        fs.mkdir(dir, { recursive: true }),
-      ),
-    );
-    const probe = path.join(dirs.root, ".writable");
+    await fs.mkdir(base, { recursive: true });
+    const probe = path.join(base, ".writable");
     await fs.writeFile(probe, "ok", "utf8");
     await fs.rm(probe, { force: true });
-    return dirs;
+    return base;
   } catch {
     return null;
   }
@@ -71,22 +72,26 @@ async function usable(root: string): Promise<Paths | null> {
 
 /* Куда в итоге легло состояние и пережило ли оно перезапуск. */
 let ephemeral = false;
-let pending: Promise<Paths> | null = null;
+let pendingRoot: Promise<string> | null = null;
 
 export function filesAreEphemeral(): boolean {
   return ephemeral;
 }
 
 /**
- * Корень хранилища, разрешаемый один раз за жизнь процесса.
+ * Базовая папка, разрешаемая один раз за жизнь процесса.
  *
  * Если настроенная папка недоступна для записи, состояние уходит во временную
  * папку системы. Это не полноценная замена: на бессерверной площадке она своя
  * у каждого экземпляра и очищается между запусками — зато чат и разборы
  * работают вместо отказа на первом же запросе. Постоянное хранилище
  * включается переменной STUDIO_DATABASE_URL.
+ *
+ * Здесь решается только «где вообще можно писать». Папки конкретного владельца
+ * заводит ownerPaths: пригодность площадки одна на процесс, а владельцев за
+ * его жизнь бывает много.
  */
-async function resolveRoot(): Promise<Paths> {
+async function resolveRoot(): Promise<string> {
   const wanted = studioDir();
   const direct = await usable(wanted);
   if (direct) {
@@ -98,7 +103,7 @@ async function resolveRoot(): Promise<Paths> {
   if (temporary) {
     ephemeral = true;
     console.warn(
-      `[studio] ${wanted} недоступна для записи, состояние уходит во временную папку ${temporary.root}. ` +
+      `[studio] ${wanted} недоступна для записи, состояние уходит во временную папку ${temporary}. ` +
         "Задайте STUDIO_DATABASE_URL, чтобы оно сохранялось.",
     );
     return temporary;
@@ -110,16 +115,114 @@ async function resolveRoot(): Promise<Paths> {
   );
 }
 
-function ready(): Promise<Paths> {
-  if (!pending) {
+function rootReady(): Promise<string> {
+  if (!pendingRoot) {
     /* Неудачную попытку не кэшируем: причина может быть временной, и
        навсегда запомненный отказ пережил бы саму проблему. */
-    pending = resolveRoot().catch((error) => {
-      pending = null;
+    pendingRoot = resolveRoot().catch((error) => {
+      pendingRoot = null;
       throw error;
     });
   }
+  return pendingRoot;
+}
+
+/* Папки владельцев: по одному mkdir на владельца за процесс, а не на запрос. */
+const owners = new Map<string, Promise<Paths>>();
+let legacyWarned = false;
+
+/**
+ * Подсказка про данные, лежащие в корне со времён общего пространства.
+ *
+ * Переносить их самим нельзя: процесс в этот момент уже обслуживает запросы, и
+ * Move-Item под работающей записью теряет файл молча. Поэтому — одна строка в
+ * лог с готовой командой, и решение за человеком.
+ */
+async function warnAboutLegacyLayout(base: string): Promise<void> {
+  if (legacyWarned) return;
+  const legacy = await fs.stat(path.join(base, "documents")).catch(() => null);
+  if (!legacy?.isDirectory()) return;
+  legacyWarned = true;
+  console.warn(
+    [
+      `[studio] В ${base} лежат данные старой раскладки, до разделения по владельцам.`,
+      "Приложение их не переносит — перенесите вручную:",
+      "  mkdir .lura-studio\\local",
+      "  Move-Item .lura-studio\\documents,.lura-studio\\index,.lura-studio\\threads," +
+        ".lura-studio\\artifacts,.lura-studio\\project .lura-studio\\local\\",
+    ].join("\n"),
+  );
+}
+
+async function prepareOwner(owner: OwnerId): Promise<Paths> {
+  const dirs = paths(path.join(await rootReady(), owner));
+  /* mkdir возвращает путь, только если что-то действительно создал. Это и есть
+     признак первого запуска владельца — и единственный момент, когда про старую
+     раскладку уместно сказать. */
+  const created = await fs.mkdir(dirs.root, { recursive: true });
+  await Promise.all(
+    [dirs.documents, dirs.index, dirs.threads, dirs.artifacts, dirs.project].map((dir) =>
+      fs.mkdir(dir, { recursive: true }),
+    ),
+  );
+  if (created !== undefined) await warnAboutLegacyLayout(path.dirname(dirs.root));
+  return dirs;
+}
+
+/** Папки владельца, готовые к записи. Как и корень — по одному разу за процесс. */
+function ownerPaths(owner: OwnerId): Promise<Paths> {
+  const known = owners.get(owner);
+  if (known) return known;
+  const pending = prepareOwner(owner).catch((error) => {
+    owners.delete(owner);
+    throw error;
+  });
+  owners.set(owner, pending);
   return pending;
+}
+
+/**
+ * Идентификатор как часть имени файла.
+ *
+ * path.join разворачивает «..», поэтому идентификатор со слэшем или точками
+ * перестаёт быть именем файла и становится путём. Каталог владельца — граница
+ * ровно до тех пор, пока id не умеет из него выйти; без этой проверки
+ * разделение по папкам не изоляция, а её видимость.
+ *
+ * Набор символов взят с запасом под то, что выдаёт newId(): короткий срез
+ * randomUUID(). Ни точки, ни слэша, ни обратного слэша в нём нет — выйти вверх
+ * такому идентификатору нечем.
+ *
+ * Значение отвергается, а не чинится. path.basename("../../чужой") молча
+ * вернул бы "чужой" и выполнил бы операцию не над тем, что прислали, — по той
+ * же причине asOwnerId не приводит регистр: тихо исправленный чужой
+ * идентификатор опаснее отказа.
+ */
+const ID_SHAPE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * Непригодный id на чтении и удалении — то же самое, что несуществующий.
+ *
+ * Отдельный статус или отдельный текст сам по себе сообщал бы, что такой id
+ * бывает; маршруты уже отвечают на чужое «не найдено», и проверка формы не
+ * должна заводить второй ответ.
+ *
+ * Экспортируется ради теста. Правило это ловит обход каталога, а проверять
+ * такое правило можно только по нему самому: тест, переписавший регулярное
+ * выражение у себя, проверяет свою копию и молчит, когда расходится исходная.
+ */
+export function isSafeId(id: string): boolean {
+  return ID_SHAPE.test(id);
+}
+
+/**
+ * То же правило на записи, где id приходит не снаружи, а из newId() или из уже
+ * прочитанной записи. Здесь непригодное значение — сломанный инвариант, а не
+ * запрос к несуществующему, и молчать о нём нечестно.
+ */
+function safeId(id: string): string {
+  if (!ID_SHAPE.test(id)) throw new Error("Недопустимый идентификатор.");
+  return id;
 }
 
 async function readJson<T>(file: string): Promise<T | null> {
@@ -172,14 +275,14 @@ function keywordScore(query: string, chunk: string): number {
   return present.size / words.size + density * 0.1;
 }
 
-export function createFileStore(): StudioStore {
+export function createFileStore(owner: OwnerId): StudioStore {
   return {
     get label() {
       return ephemeral ? "временные файлы" : "файлы";
     },
 
     async listDocuments() {
-      const dirs = await ready();
+      const dirs = await ownerPaths(owner);
       const files = await fs.readdir(dirs.documents).catch(() => [] as string[]);
       const documents = await Promise.all(
         files
@@ -193,14 +296,15 @@ export function createFileStore(): StudioStore {
     },
 
     async readDocumentText(id) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return "";
+      const dirs = await ownerPaths(owner);
       return fs.readFile(path.join(dirs.documents, `${id}.txt`), "utf8").catch(() => "");
     },
 
     async saveDocument(draft: DocumentDraft, text) {
-      const dirs = await ready();
+      const dirs = await ownerPaths(owner);
       const document: StudioDocument = {
-        id: draft.id ?? newId(),
+        id: safeId(draft.id ?? newId()),
         title: draft.title,
         kind: draft.kind,
         origin: draft.origin,
@@ -215,7 +319,8 @@ export function createFileStore(): StudioStore {
     },
 
     async updateDocument(id, patch) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return null;
+      const dirs = await ownerPaths(owner);
       const file = path.join(dirs.documents, `${id}.json`);
       const current = await readJson<StudioDocument>(file);
       if (!current) return null;
@@ -225,7 +330,8 @@ export function createFileStore(): StudioStore {
     },
 
     async deleteDocument(id) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return;
+      const dirs = await ownerPaths(owner);
       await Promise.all([
         fs.rm(path.join(dirs.documents, `${id}.json`), { force: true }),
         fs.rm(path.join(dirs.documents, `${id}.txt`), { force: true }),
@@ -234,18 +340,18 @@ export function createFileStore(): StudioStore {
     },
 
     async saveChunks(documentId, title, chunks, vectors) {
-      const dirs = await ready();
+      const dirs = await ownerPaths(owner);
       const index: ChunkIndex = {
         documentId,
         title,
         chunks,
         vectors: vectors && vectors.length === chunks.length ? vectors : null,
       };
-      await writeJson(path.join(dirs.index, `${documentId}.json`), index);
+      await writeJson(path.join(dirs.index, `${safeId(documentId)}.json`), index);
     },
 
     async searchChunks(query, limit) {
-      const dirs = await ready();
+      const dirs = await ownerPaths(owner);
       const files = await fs.readdir(dirs.index).catch(() => [] as string[]);
       const indexes = await Promise.all(
         files.filter((name) => name.endsWith(".json")).map((name) => readJson<ChunkIndex>(path.join(dirs.index, name))),
@@ -265,7 +371,7 @@ export function createFileStore(): StudioStore {
     },
 
     async listThreads(): Promise<ThreadSummary[]> {
-      const dirs = await ready();
+      const dirs = await ownerPaths(owner);
       const files = await fs.readdir(dirs.threads).catch(() => [] as string[]);
       const threads = await Promise.all(
         files.filter((name) => name.endsWith(".json")).map((name) => readJson<StudioThread>(path.join(dirs.threads, name))),
@@ -284,27 +390,30 @@ export function createFileStore(): StudioStore {
     },
 
     async readThread(id) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return null;
+      const dirs = await ownerPaths(owner);
       return readJson<StudioThread>(path.join(dirs.threads, `${id}.json`));
     },
 
     async saveThread(thread) {
-      const dirs = await ready();
-      await writeJson(path.join(dirs.threads, `${thread.id}.json`), thread);
+      const dirs = await ownerPaths(owner);
+      await writeJson(path.join(dirs.threads, `${safeId(thread.id)}.json`), thread);
     },
 
     async deleteThread(id) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return;
+      const dirs = await ownerPaths(owner);
       await fs.rm(path.join(dirs.threads, `${id}.json`), { force: true });
     },
 
     async saveArtifact(id, markdown) {
-      const dirs = await ready();
-      await fs.writeFile(path.join(dirs.artifacts, `${id}.md`), markdown, "utf8");
+      const dirs = await ownerPaths(owner);
+      await fs.writeFile(path.join(dirs.artifacts, `${safeId(id)}.md`), markdown, "utf8");
     },
 
     async readArtifact(id) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return null;
+      const dirs = await ownerPaths(owner);
       return fs.readFile(path.join(dirs.artifacts, `${id}.md`), "utf8").catch(() => null);
     },
 
@@ -315,17 +424,20 @@ export function createFileStore(): StudioStore {
        который можно открыть мимо приложения. */
 
     async listNodes() {
-      const dirs = await ready();
+      const dirs = await ownerPaths(owner);
       return (await readJson<StudioNode[]>(path.join(dirs.project, "index.json"))) ?? [];
     },
 
     async saveNode(node, content) {
-      const dirs = await ready();
+      /* Проверка до записи описи, а не только перед .md: узел с непригодным id
+         попал бы в index.json и вернулся бы оттуда следующим запросом. */
+      const id = safeId(node.id);
+      const dirs = await ownerPaths(owner);
       const file = path.join(dirs.project, "index.json");
       const nodes = (await readJson<StudioNode[]>(file)) ?? [];
 
       if (content !== null && node.kind === "file") {
-        await fs.writeFile(path.join(dirs.project, `${node.id}.md`), content, "utf8");
+        await fs.writeFile(path.join(dirs.project, `${id}.md`), content, "utf8");
       }
       const saved: StudioNode = {
         ...node,
@@ -339,12 +451,14 @@ export function createFileStore(): StudioStore {
     },
 
     async readNodeContent(id) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return null;
+      const dirs = await ownerPaths(owner);
       return fs.readFile(path.join(dirs.project, `${id}.md`), "utf8").catch(() => null);
     },
 
     async deleteNode(id) {
-      const dirs = await ready();
+      if (!isSafeId(id)) return;
+      const dirs = await ownerPaths(owner);
       const file = path.join(dirs.project, "index.json");
       const nodes = (await readJson<StudioNode[]>(file)) ?? [];
       await writeJson(file, nodes.filter((item) => item.id !== id));

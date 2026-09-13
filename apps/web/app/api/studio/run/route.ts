@@ -43,6 +43,7 @@ export async function POST(request: Request) {
 
       try {
         for await (const event of runAgent({
+          owner: owner.ownerId,
           threadId: body?.threadId,
           prompt,
           model: body?.model,

@@ -1,5 +1,6 @@
 import postgres from "postgres";
 
+import { LOCAL_OWNER_VALUE, type OwnerId } from "@/lib/studio/owner";
 import {
   StorageUnavailableError,
   type DocumentDraft,
@@ -21,12 +22,29 @@ import type { DocumentKind, StudioMessage } from "@/lib/studio/types";
  *
  * Соединение идёт с `prepare: false`: на бессерверной площадке подключаться
  * положено через transaction pooler, а он не умеет подготовленные выражения.
+ *
+ * Владелец здесь — колонка owner_id, и она входит в тот же where, что и id:
+ * `where id = ${id} and owner_id = ${owner}`. Достать строку по id, а потом
+ * сверить владельца — это тот самый баг, ради которого шаблон и существует.
+ * У фрагментов изоляция вдобавок структурная: составной внешний ключ
+ * (document_id, owner_id) не даёт фрагменту принадлежать не тому, кому
+ * принадлежит его документ, чем бы ни ошиблось приложение.
  */
 
 type Row = Record<string, unknown>;
 
 let client: postgres.Sql | null = null;
 let schemaReady: Promise<void> | null = null;
+
+/**
+ * Ключ блокировки для перевода схемы на владельцев.
+ *
+ * Холодных стартов на бессерверной площадке бывает несколько сразу, и все они
+ * выполняют один и тот же DDL. Без блокировки они гонятся и за создание
+ * ограничений, и — что хуже — за backfill: один дописывает owner_id, другой в
+ * этот момент ставит not null. Число произвольное, важно лишь что оно одно.
+ */
+const SCHEMA_LOCK = 5171204983;
 
 export function databaseUrl(): string | null {
   const url = process.env.STUDIO_DATABASE_URL?.trim();
@@ -77,6 +95,7 @@ async function ensureSchema(): Promise<void> {
 
       create table if not exists studio.documents (
         id text primary key,
+        owner_id text not null,
         title text not null,
         kind text not null check (kind in ('business', 'source')),
         origin jsonb not null default '{}'::jsonb,
@@ -89,6 +108,7 @@ async function ensureSchema(): Promise<void> {
 
       create table if not exists studio.chunks (
         id bigserial primary key,
+        owner_id text not null,
         document_id text not null references studio.documents(id) on delete cascade,
         position integer not null,
         title text not null,
@@ -97,11 +117,17 @@ async function ensureSchema(): Promise<void> {
         search tsvector generated always as (to_tsvector('russian', body)) stored
       );
 
+      /* Одиночный индекс по document_id остаётся: составной
+         (owner_id, document_id) его не заменяет — полезный префикс у составного
+         это owner_id, а не document_id. На document_id висит свой внешний ключ,
+         и без этого индекса каждое удаление документа проверяет каскад
+         последовательным чтением всех фрагментов, включая чужие. */
       create index if not exists chunks_document on studio.chunks (document_id);
       create index if not exists chunks_search on studio.chunks using gin (search);
 
       create table if not exists studio.threads (
         id text primary key,
+        owner_id text not null,
         mode text not null default 'reports',
         title text not null,
         created_at timestamptz not null default now(),
@@ -111,12 +137,14 @@ async function ensureSchema(): Promise<void> {
 
       create table if not exists studio.artifacts (
         id text primary key,
+        owner_id text not null,
         markdown text not null,
         created_at timestamptz not null default now()
       );
 
       create table if not exists studio.nodes (
         id text primary key,
+        owner_id text not null,
         parent_id text references studio.nodes(id) on delete cascade,
         kind text not null,
         name text not null,
@@ -125,6 +153,70 @@ async function ensureSchema(): Promise<void> {
         updated_at timestamptz not null default now()
       );
     `);
+
+    /* Перевод схемы на владельцев.
+       Всё одной транзакцией под advisory-блокировкой: на бессерверной площадке
+       холодных стартов бывает несколько сразу, и без неё два процесса
+       одновременно доливают owner_id и ставят not null на полупустой колонке.
+       Блокировка именно xact-варианта — она снимается вместе с транзакцией, и
+       оборвавшееся соединение не оставляет схему запертой навсегда.
+
+       На чистой базе весь блок — набор no-op: колонки уже созданы выше. Он
+       нужен тем, у кого таблицы появились до разделения; их строки достаются
+       владельцу LOCAL_OWNER_VALUE, потому что до разделения все они и были его. */
+    await db.begin(async (tx) => {
+      await tx.unsafe(`
+        select pg_advisory_xact_lock(${SCHEMA_LOCK});
+
+        alter table studio.documents add column if not exists owner_id text;
+        alter table studio.chunks    add column if not exists owner_id text;
+        alter table studio.threads   add column if not exists owner_id text;
+        alter table studio.artifacts add column if not exists owner_id text;
+        alter table studio.nodes     add column if not exists owner_id text;
+
+        update studio.documents set owner_id = '${LOCAL_OWNER_VALUE}' where owner_id is null;
+        update studio.threads   set owner_id = '${LOCAL_OWNER_VALUE}' where owner_id is null;
+        update studio.artifacts set owner_id = '${LOCAL_OWNER_VALUE}' where owner_id is null;
+        update studio.nodes     set owner_id = '${LOCAL_OWNER_VALUE}' where owner_id is null;
+
+        /* Фрагмент наследует владельца своего документа, а не общего: документы
+           могли быть розданы вручную ещё до этого запуска. */
+        update studio.chunks c set owner_id = d.owner_id
+        from studio.documents d
+        where d.id = c.document_id and c.owner_id is null;
+        update studio.chunks set owner_id = '${LOCAL_OWNER_VALUE}' where owner_id is null;
+
+        alter table studio.documents alter column owner_id set not null;
+        alter table studio.chunks    alter column owner_id set not null;
+        alter table studio.threads   alter column owner_id set not null;
+        alter table studio.artifacts alter column owner_id set not null;
+        alter table studio.nodes     alter column owner_id set not null;
+
+        /* add constraint if not exists в Postgres нет, поэтому повтор ловится
+           как duplicate_object — единственный способ оставить DDL идемпотентным. */
+        do $$ begin
+          alter table studio.documents add constraint documents_id_owner unique (id, owner_id);
+        exception when duplicate_object then null; end $$;
+
+        /* Владелец фрагмента обязан совпадать с владельцем документа — это
+           проверяет база, а не приложение. Ошибка в коде выборки теперь не
+           может выдать чужой фрагмент: его просто некуда было бы записать. */
+        do $$ begin
+          alter table studio.chunks add constraint chunks_owner_fk
+            foreign key (document_id, owner_id)
+            references studio.documents (id, owner_id) on delete cascade;
+        exception when duplicate_object then null; end $$;
+
+        create index if not exists documents_owner on studio.documents (owner_id);
+        /* Составной индекс — для выборок владельца. Одиночный chunks_document
+           он не отменяет: тот обслуживает внешний ключ по document_id и
+           заводится вместе с таблицей выше. */
+        create index if not exists chunks_owner_document on studio.chunks (owner_id, document_id);
+        create index if not exists threads_owner on studio.threads (owner_id, updated_at desc);
+        create index if not exists artifacts_owner on studio.artifacts (owner_id);
+        create index if not exists nodes_owner on studio.nodes (owner_id);
+      `);
+    });
 
     /* Индекс по векторам отдельно: на старом pgvector нет hnsw, и ронять из-за
        этого всё хранилище незачем — поиск работает и последовательным чтением. */
@@ -175,7 +267,7 @@ function toVectorLiteral(vector: number[]): string {
   return `[${vector.join(",")}]`;
 }
 
-export function createPostgresStore(): StudioStore {
+export function createPostgresStore(owner: OwnerId): StudioStore {
   return {
     label: "Postgres",
 
@@ -184,6 +276,7 @@ export function createPostgresStore(): StudioStore {
       const rows = await conn`
         select id, title, kind, origin, chars, chunks, indexed, created_at
         from studio.documents
+        where owner_id = ${owner}
         order by (kind = 'business') desc, created_at asc
       `;
       return rows.map(toDocument);
@@ -191,7 +284,7 @@ export function createPostgresStore(): StudioStore {
 
     async readDocumentText(id) {
       const conn = await db();
-      const rows = await conn`select body from studio.documents where id = ${id}`;
+      const rows = await conn`select body from studio.documents where id = ${id} and owner_id = ${owner}`;
       return rows.length ? String(rows[0].body ?? "") : "";
     },
 
@@ -209,9 +302,9 @@ export function createPostgresStore(): StudioStore {
       };
 
       await conn`
-        insert into studio.documents (id, title, kind, origin, body, chars, chunks, indexed, created_at)
+        insert into studio.documents (id, owner_id, title, kind, origin, body, chars, chunks, indexed, created_at)
         values (
-          ${document.id}, ${document.title}, ${document.kind}, ${conn.json(document.origin)},
+          ${document.id}, ${owner}, ${document.title}, ${document.kind}, ${conn.json(document.origin)},
           ${text}, ${document.chars}, 0, 'keywords', ${document.createdAt}
         )
         on conflict (id) do update set
@@ -220,6 +313,9 @@ export function createPostgresStore(): StudioStore {
           origin = excluded.origin,
           body = excluded.body,
           chars = excluded.chars
+        /* Идентификатор занят чужим документом — не трогаем ничего. Перебить
+           чужую строку своей было бы хуже любого отказа. */
+        where studio.documents.owner_id = ${owner}
       `;
       return document;
     },
@@ -232,7 +328,7 @@ export function createPostgresStore(): StudioStore {
           kind = coalesce(${patch.kind ?? null}, kind),
           chunks = coalesce(${patch.chunks ?? null}, chunks),
           indexed = coalesce(${patch.indexed ?? null}, indexed)
-        where id = ${id}
+        where id = ${id} and owner_id = ${owner}
         returning id, title, kind, origin, chars, chunks, indexed, created_at
       `;
       return rows.length ? toDocument(rows[0]) : null;
@@ -240,7 +336,7 @@ export function createPostgresStore(): StudioStore {
 
     async deleteDocument(id) {
       const conn = await db();
-      await conn`delete from studio.documents where id = ${id}`;
+      await conn`delete from studio.documents where id = ${id} and owner_id = ${owner}`;
     },
 
     async saveChunks(documentId, title, chunks, vectors) {
@@ -248,12 +344,20 @@ export function createPostgresStore(): StudioStore {
       const usable = vectors && vectors.length === chunks.length ? vectors : null;
 
       await conn.begin(async (tx) => {
-        await tx`delete from studio.chunks where document_id = ${documentId}`;
+        /* Документ проверяется в той же транзакции, что и запись фрагментов:
+           чужой идентификатор не должен ни стереть чужие фрагменты, ни завести
+           свои под чужим документом. Нет документа — тихо выходим, ровно как и
+           при несуществующем: отличать «чужой» от «нет такого» незачем. */
+        const owned = await tx`select 1 from studio.documents where id = ${documentId} and owner_id = ${owner}`;
+        if (!owned.length) return;
+
+        await tx`delete from studio.chunks where document_id = ${documentId} and owner_id = ${owner}`;
         if (!chunks.length) return;
 
         /* Вставка пачкой: у длинного документа сотни фрагментов, и по одному
            запросу на каждый — это сотни круговых поездок к базе. */
         const payload = chunks.map((body, position) => ({
+          owner_id: owner,
           document_id: documentId,
           position,
           title,
@@ -262,7 +366,7 @@ export function createPostgresStore(): StudioStore {
         }));
 
         for (let offset = 0; offset < payload.length; offset += 100) {
-          await tx`insert into studio.chunks ${tx(payload.slice(offset, offset + 100), "document_id", "position", "title", "body", "embedding")}`;
+          await tx`insert into studio.chunks ${tx(payload.slice(offset, offset + 100), "owner_id", "document_id", "position", "title", "body", "embedding")}`;
         }
       });
     },
@@ -270,11 +374,14 @@ export function createPostgresStore(): StudioStore {
     async searchChunks(query, limit) {
       const conn = await db();
 
+      /* owner_id в обоих where — это граница между арендаторами, а не
+         оптимизация. Убрать его ради скорости значит показать чужие документы:
+         если запрос понадобится ускорить, ускоряется всё остальное. */
       if (query.vector) {
         const rows = await conn`
           select document_id, title, body, 1 - (embedding <=> ${toVectorLiteral(query.vector)}::vector) as score
           from studio.chunks
-          where embedding is not null
+          where owner_id = ${owner} and embedding is not null
           order by embedding <=> ${toVectorLiteral(query.vector)}::vector
           limit ${limit}
         `;
@@ -291,7 +398,7 @@ export function createPostgresStore(): StudioStore {
       const rows = await conn`
         select document_id, title, body, ts_rank(search, websearch_to_tsquery('russian', ${query.text})) as score
         from studio.chunks
-        where search @@ websearch_to_tsquery('russian', ${query.text})
+        where owner_id = ${owner} and search @@ websearch_to_tsquery('russian', ${query.text})
         order by score desc
         limit ${limit}
       `;
@@ -318,6 +425,7 @@ export function createPostgresStore(): StudioStore {
             where message->>'role' = 'agent' and coalesce(message->>'mode', 'report') <> 'chat'
           ) as reports
         from studio.threads
+        where owner_id = ${owner}
         order by updated_at desc
       `;
       return rows.map((row) => ({
@@ -332,7 +440,7 @@ export function createPostgresStore(): StudioStore {
     async readThread(id) {
       const conn = await db();
       const rows = await conn`
-        select id, title, created_at, updated_at, messages from studio.threads where id = ${id}
+        select id, title, created_at, updated_at, messages from studio.threads where id = ${id} and owner_id = ${owner}
       `;
       return rows.length ? toThread(rows[0]) : null;
     },
@@ -340,31 +448,33 @@ export function createPostgresStore(): StudioStore {
     async saveThread(thread) {
       const conn = await db();
       await conn`
-        insert into studio.threads (id, title, created_at, updated_at, messages)
-        values (${thread.id}, ${thread.title}, ${thread.createdAt}, ${thread.updatedAt}, ${conn.json(thread.messages)})
+        insert into studio.threads (id, owner_id, title, created_at, updated_at, messages)
+        values (${thread.id}, ${owner}, ${thread.title}, ${thread.createdAt}, ${thread.updatedAt}, ${conn.json(thread.messages)})
         on conflict (id) do update set
           title = excluded.title,
           updated_at = excluded.updated_at,
           messages = excluded.messages
+        where studio.threads.owner_id = ${owner}
       `;
     },
 
     async deleteThread(id) {
       const conn = await db();
-      await conn`delete from studio.threads where id = ${id}`;
+      await conn`delete from studio.threads where id = ${id} and owner_id = ${owner}`;
     },
 
     async saveArtifact(id, markdown) {
       const conn = await db();
       await conn`
-        insert into studio.artifacts (id, markdown) values (${id}, ${markdown})
+        insert into studio.artifacts (id, owner_id, markdown) values (${id}, ${owner}, ${markdown})
         on conflict (id) do update set markdown = excluded.markdown
+        where studio.artifacts.owner_id = ${owner}
       `;
     },
 
     async readArtifact(id) {
       const conn = await db();
-      const rows = await conn`select markdown from studio.artifacts where id = ${id}`;
+      const rows = await conn`select markdown from studio.artifacts where id = ${id} and owner_id = ${owner}`;
       return rows.length ? String(rows[0].markdown) : null;
     },
 
@@ -375,7 +485,7 @@ export function createPostgresStore(): StudioStore {
       const rows = await conn`
         select id, parent_id, kind, name, created_at, updated_at,
                case when kind = 'file' then coalesce(length(content), 0) else null end as chars
-        from studio.nodes order by name asc
+        from studio.nodes where owner_id = ${owner} order by name asc
       `;
       return rows.map((row) => ({
         id: String(row.id),
@@ -390,29 +500,39 @@ export function createPostgresStore(): StudioStore {
 
     async saveNode(node, content) {
       const conn = await db();
+      /* Родитель проверяется отдельно: внешний ключ у nodes одноколоночный и
+         про владельца ничего не знает, поэтому без проверки чужая папка годилась
+         бы в родители. Исключение, а не тихий отказ: сюда доходят только мимо
+         проверки дерева в обработчике, а это ошибка кода, а не ввода. */
+      if (node.parentId !== null) {
+        const parent = await conn`select 1 from studio.nodes where id = ${node.parentId} and owner_id = ${owner}`;
+        if (!parent.length) throw new Error("Родительская папка не найдена.");
+      }
+
       /* content = null означает «не трогать»: переименование не должно
          стирать текст отчёта. Поэтому coalesce на исключённом значении. */
       await conn`
-        insert into studio.nodes (id, parent_id, kind, name, content, updated_at)
-        values (${node.id}, ${node.parentId}, ${node.kind}, ${node.name}, ${content}, now())
+        insert into studio.nodes (id, owner_id, parent_id, kind, name, content, updated_at)
+        values (${node.id}, ${owner}, ${node.parentId}, ${node.kind}, ${node.name}, ${content}, now())
         on conflict (id) do update set
           parent_id = excluded.parent_id,
           name = excluded.name,
           content = coalesce(excluded.content, studio.nodes.content),
           updated_at = now()
+        where studio.nodes.owner_id = ${owner}
       `;
       return { ...node, chars: node.kind === "folder" ? null : content !== null ? content.length : node.chars };
     },
 
     async readNodeContent(id) {
       const conn = await db();
-      const rows = await conn`select content from studio.nodes where id = ${id}`;
+      const rows = await conn`select content from studio.nodes where id = ${id} and owner_id = ${owner}`;
       return rows.length && rows[0].content !== null ? String(rows[0].content) : null;
     },
 
     async deleteNode(id) {
       const conn = await db();
-      await conn`delete from studio.nodes where id = ${id}`;
+      await conn`delete from studio.nodes where id = ${id} and owner_id = ${owner}`;
     },
   };
 }

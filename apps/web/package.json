@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start --port 3001",
     "lint": "tsc --noEmit",
+    "test": "node --test --import ./test/register.mjs \"lib/**/*.test.mjs\"",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true})\""
   },
   "dependencies": {

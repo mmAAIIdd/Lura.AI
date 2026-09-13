@@ -6,11 +6,11 @@ import { fetchPublic } from "@/lib/studio/net";
 import { indexDocument } from "@/lib/studio/rag";
 import {
   StorageUnavailableError,
-  listDocuments,
-  saveDocument,
   setBusinessDocument,
+  studioStore,
   type DocumentKind,
   type StudioDocument,
+  type StudioStore,
 } from "@/lib/studio/store";
 import { htmlToText, looksTextual } from "@/lib/studio/text";
 
@@ -29,38 +29,43 @@ function fail(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-async function store(
+/* Назван ingest, а не store: хранилище теперь тоже приходит сюда значением, и
+   два «store» в одной области видимости различались бы только на глаз. */
+async function ingest(
+  store: StudioStore,
   title: string,
   text: string,
   kind: DocumentKind,
   origin: StudioDocument["origin"],
 ): Promise<StudioDocument> {
-  const document = await saveDocument({ title, kind, origin }, text);
-  const index = await indexDocument(document.id, title, text);
-  if (kind === "business") await setBusinessDocument(document.id);
+  const document = await store.saveDocument({ title, kind, origin }, text);
+  const index = await indexDocument(store, document.id, title, text);
+  if (kind === "business") await setBusinessDocument(store, document.id);
   return { ...document, chunks: index.chunks, indexed: index.vectors ? "embeddings" : "keywords" };
 }
 
 export async function GET() {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
-  return NextResponse.json({ documents: await listDocuments() });
+  return NextResponse.json({ documents: await store.listDocuments() });
 }
 
 export async function POST(request: Request) {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
   try {
-    return await handleUpload(request);
+    return await handleUpload(request, store);
   } catch (error) {
     if (error instanceof StorageUnavailableError) return fail(error.message, 503);
     throw error;
   }
 }
 
-async function handleUpload(request: Request) {
+async function handleUpload(request: Request, store: StudioStore) {
   const type = request.headers.get("content-type") || "";
 
   if (type.includes("application/json")) {
@@ -90,7 +95,7 @@ async function handleUpload(request: Request) {
       const text = parsed.text || raw;
       if (!text.trim()) return fail("На странице не нашлось текста.");
 
-      const document = await store(body.title?.trim() || parsed.title || url.hostname, text, kind, {
+      const document = await ingest(store, body.title?.trim() || parsed.title || url.hostname, text, kind, {
         type: "url",
         url: url.href,
       });
@@ -98,7 +103,7 @@ async function handleUpload(request: Request) {
     }
 
     if (body.text?.trim()) {
-      const document = await store(body.title?.trim() || "Вставленный текст", body.text.trim(), kind, { type: "text" });
+      const document = await ingest(store, body.title?.trim() || "Вставленный текст", body.text.trim(), kind, { type: "text" });
       return NextResponse.json({ documents: [document] }, { status: 201 });
     }
 
@@ -127,7 +132,7 @@ async function handleUpload(request: Request) {
       return fail(`Файл «${file.name}» не текстовый. Подойдут txt, md, csv, json, log, html.`);
     }
 
-    created.push(await store(file.name.replace(/\.[^.]+$/, ""), text, kind, { type: "file", name: file.name }));
+    created.push(await ingest(store, file.name.replace(/\.[^.]+$/, ""), text, kind, { type: "file", name: file.name }));
     /* Основной документ ровно один: второй файл в той же загрузке идёт источником. */
     if (kind === "business") break;
   }

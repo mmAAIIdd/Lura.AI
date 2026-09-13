@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { requireStudioOwner } from "@/lib/studio/auth";
 import { LURA_MODELS, geminiKey } from "@/lib/studio/config";
 import { currentProvider } from "@/lib/studio/search";
-import { StorageUnavailableError, listDocuments, listThreads, storageIsEphemeral, storeLabel } from "@/lib/studio/store";
+import { StorageUnavailableError, storageIsEphemeral, studioStore, type StudioStore } from "@/lib/studio/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,11 +12,12 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
-  let documents: Awaited<ReturnType<typeof listDocuments>>;
-  let threads: Awaited<ReturnType<typeof listThreads>>;
+  let documents: Awaited<ReturnType<StudioStore["listDocuments"]>>;
+  let threads: Awaited<ReturnType<StudioStore["listThreads"]>>;
   try {
-    [documents, threads] = await Promise.all([listDocuments(), listThreads()]);
+    [documents, threads] = await Promise.all([store.listDocuments(), store.listThreads()]);
   } catch (error) {
     if (error instanceof StorageUnavailableError) {
       return NextResponse.json({ error: error.message }, { status: 503 });
@@ -31,7 +32,7 @@ export async function GET() {
       ready: Boolean(geminiKey()),
       models: LURA_MODELS,
       search: currentProvider(),
-      storage: storeLabel(),
+      storage: store.label,
       ephemeral: storageIsEphemeral(),
     },
   });

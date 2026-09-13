@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { studioIsOpen } from "@/lib/studio/access";
+import { LOCAL_OWNER, asOwnerId, type OwnerId } from "@/lib/studio/owner";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,21 +34,36 @@ import { createClient } from "@/lib/supabase/server";
  *
  * В продакшене без STUDIO_PUBLIC сюда не попасть: там единственный путь —
  * подписанный токен Supabase.
+ *
+ * С разделением пространств по владельцу это уже не просто метка в логе, а
+ * граница данных: «local» — такой же арендатор, как любой sub, со своей папкой
+ * на диске и своим значением в owner_id. Поэтому и значение живёт теперь в
+ * lib/studio/owner.ts, рядом с проверкой, а не здесь.
  */
-export const LOCAL_OWNER = "local";
+export { LOCAL_OWNER };
+export type { OwnerId };
 
 /** Владелец запроса либо готовый 401 — разбирается через `"denied" in result`. */
-export type StudioOwner = { ownerId: string } | { denied: Response };
+export type StudioOwner = { ownerId: OwnerId } | { denied: Response };
 
 /**
  * Владелец текущего запроса к Studio.
  *
  * Вызывается первой строкой каждого обработчика. Значение ownerId — то самое,
- * которым дальше будут ограничиваться выборки из хранилища.
+ * которым дальше ограничиваются выборки из хранилища.
+ *
+ * sub из токена проходит через asOwnerId, и не прошедший проверку получает
+ * отказ, а не исправленное значение. Личность, которую нельзя записать в
+ * границу, — это личность, которую нельзя изолировать; подчистить её означало
+ * бы поселить неизвестно кого в чужом пространстве. Отказ честнее.
  */
 export async function requireStudioOwner(): Promise<StudioOwner> {
-  const ownerId = await signedInOwner();
-  if (ownerId) return { ownerId };
+  const sub = await signedInOwner();
+  if (sub) {
+    const ownerId = asOwnerId(sub);
+    if (ownerId) return { ownerId };
+    return { denied: NextResponse.json({ error: "Требуется вход." }, { status: 401 }) };
+  }
   if (studioIsOpen()) return { ownerId: LOCAL_OWNER };
   return { denied: NextResponse.json({ error: "Требуется вход." }, { status: 401 }) };
 }

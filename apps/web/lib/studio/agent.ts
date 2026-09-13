@@ -13,16 +13,13 @@ import { searchDocuments } from "@/lib/studio/rag";
 import {
   businessDocument,
   emptyThread,
-  listDocuments,
   newId,
-  readDocumentText,
-  readThread,
-  saveArtifact,
-  saveThread,
+  studioStore,
   type StudioMessage,
   type StudioThread,
   type ToolTrace,
 } from "@/lib/studio/store";
+import type { OwnerId } from "@/lib/studio/owner";
 import { saveReportToProject } from "@/lib/studio/project-write";
 import { TOOL_DECLARATIONS, runTool } from "@/lib/studio/tools";
 
@@ -37,6 +34,13 @@ import { TOOL_DECLARATIONS, runTool } from "@/lib/studio/tools";
  * подставляет её перед вопросом, всё остальное — обычный разговор. От режима
  * зависят и системная инструкция, и бюджет времени: ждать две минуты ответа
  * на «привет» никто не станет.
+ *
+ * Владелец приходит из обработчика и превращается в хранилище ровно один раз,
+ * на весь прогон. Держать «текущего владельца» где-то в модуле было бы
+ * заманчиво и неверно: два SSE-потока идут одновременно, и второй переписал бы
+ * значение под первым — утечка, которая проявляется раз в сто прогонов и
+ * поэтому страшнее той, которую здесь закрывают. Поэтому store передаётся
+ * вниз параметром, и ничего разделяемого между запросами не появляется.
  */
 
 export type Attachment = { name: string; mimeType: string; data: string; text?: string };
@@ -60,6 +64,8 @@ export type AgentEvent =
   | { type: "error"; message: string };
 
 type RunInput = {
+  /** Чьё это пространство. Проверен в requireStudioOwner, дальше не оспаривается. */
+  owner: OwnerId;
   threadId?: string;
   prompt: string;
   /** Публичное имя модели: lura-pro или lura-fast. */
@@ -95,6 +101,7 @@ function userParts(prompt: string, attachments: Attachment[]): Part[] {
 }
 
 export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
+  const store = studioStore(input.owner);
   const attachments = input.attachments ?? [];
   const parsed = parsePrompt(input.prompt);
   const mode = parsed.mode;
@@ -104,7 +111,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
      за неё текстом, который нигде не настроить. */
   const modelText = parsed.text || (mode === "report" ? "Предмет разбора не указан." : parsed.raw);
 
-  const thread = (input.threadId ? await readThread(input.threadId) : null) ?? emptyThread(titleFrom(input.prompt));
+  const thread = (input.threadId ? await store.readThread(input.threadId) : null) ?? emptyThread(titleFrom(input.prompt));
 
   const tier = asLuraModel(input.model);
   yield { type: "mode", mode };
@@ -113,14 +120,14 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   /* Агент видит ровно те материалы, что отмечены у пользователя: иначе экран
      обещает «ответ по этим трём файлам», а разбор тихо опирается на четвёртый. */
   const only = input.sources ? new Set(input.sources) : null;
-  const [allDocuments, allBusiness] = await Promise.all([listDocuments(), businessDocument()]);
+  const [allDocuments, allBusiness] = await Promise.all([store.listDocuments(), businessDocument(store)]);
   const documents = only ? allDocuments.filter((document) => only.has(document.id)) : allDocuments;
   const business = allBusiness && (!only || only.has(allBusiness.id)) ? allBusiness : null;
-  const businessContext = business ? { document: business, text: await readDocumentText(business.id) } : null;
+  const businessContext = business ? { document: business, text: await store.readDocumentText(business.id) } : null;
 
   /* Фрагменты под текущий вопрос подставляются заранее: без этого первый ход
      модели уходит на search_documents с тем же самым запросом. */
-  const excerpts = documents.length ? await searchDocuments(modelText, undefined, only) : [];
+  const excerpts = documents.length ? await searchDocuments(store, modelText, undefined, only) : [];
   const systemInstruction = buildSystemInstruction({
     mode,
     business: businessContext,
@@ -221,7 +228,7 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
           },
         };
         const toolStarted = Date.now();
-        const outcome = await runTool(call.name, call.args, { sources: only });
+        const outcome = await runTool(call.name, call.args, { store, sources: only });
         log(`  ${call.name} ${Math.round((Date.now() - toolStarted) / 1000)}с — ${outcome.trace.summary}`);
         traces.push(outcome.trace);
         yield { type: "tool", phase: "done", trace: outcome.trace };
@@ -258,13 +265,13 @@ export async function* runAgent(input: RunInput): AsyncGenerator<AgentEvent> {
   if (thread.messages.length <= 2) thread.title = titleFrom(input.prompt);
 
   const artifact = buildArtifact(parsed.text || parsed.raw, agentMessage);
-  await saveArtifact(artifactId, artifact);
-  await saveThread(thread);
+  await store.saveArtifact(artifactId, artifact);
+  await store.saveThread(thread);
 
   /* Разбор дополнительно ложится файлом в проект. Только разбор: складывать
      туда каждую реплику разговора значит завалить дерево мусором. */
   if (mode === "report" && answer.trim()) {
-    await saveReportToProject(titleFrom(input.prompt), artifact);
+    await saveReportToProject(store, titleFrom(input.prompt), artifact);
   }
 
   yield { type: "done", thread, message: agentMessage };

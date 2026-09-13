@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireStudioOwner } from "@/lib/studio/auth";
 import { MAX_FILE_CHARS, checkName, descendants, nameTaken } from "@/lib/studio/project";
-import { StorageUnavailableError, deleteNode, listNodes, readNodeContent, saveNode } from "@/lib/studio/store";
+import { StorageUnavailableError, studioStore } from "@/lib/studio/store";
 import type { StudioNode } from "@/lib/studio/store";
 
 export const runtime = "nodejs";
@@ -24,19 +24,23 @@ async function withStore<T>(run: () => Promise<T>): Promise<T | NextResponse> {
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
   const { id } = await context.params;
   return withStore(async () => {
-    const node = (await listNodes()).find((item) => item.id === id);
+    /* Список — уже список владельца, поэтому чужой узел неотличим от
+       несуществующего: тот же 404 и тот же текст. */
+    const node = (await store.listNodes()).find((item) => item.id === id);
     if (!node) return fail("Файл не найден.", 404);
     if (node.kind === "folder") return fail("У папки нет содержимого.", 400);
-    return NextResponse.json({ node, content: (await readNodeContent(id)) ?? "" });
+    return NextResponse.json({ node, content: (await store.readNodeContent(id)) ?? "" });
   });
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
   const { id } = await context.params;
   const body = (await request.json().catch(() => null)) as { content?: string } | null;
@@ -46,10 +50,10 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   if (content.length > MAX_FILE_CHARS) return fail(`Файл длиннее ${MAX_FILE_CHARS.toLocaleString("ru-RU")} символов.`, 413);
 
   return withStore(async () => {
-    const node = (await listNodes()).find((item) => item.id === id);
+    const node = (await store.listNodes()).find((item) => item.id === id);
     if (!node) return fail("Файл не найден.", 404);
     if (node.kind === "folder") return fail("В папку нельзя записать текст.", 400);
-    const saved = await saveNode({ ...node, updatedAt: new Date().toISOString() }, content);
+    const saved = await store.saveNode({ ...node, updatedAt: new Date().toISOString() }, content);
     return NextResponse.json({ node: saved });
   });
 }
@@ -57,13 +61,14 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
   const { id } = await context.params;
   const body = (await request.json().catch(() => null)) as { name?: string; parentId?: string | null } | null;
   if (!body) return fail("Тело запроса не разобралось.", 400);
 
   return withStore(async () => {
-    const nodes = await listNodes();
+    const nodes = await store.listNodes();
     const node = nodes.find((item) => item.id === id);
     if (!node) return fail("Элемент не найден.", 404);
 
@@ -91,7 +96,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     if (nameTaken(nodes, parentId, name, id)) return fail("Здесь уже есть элемент с таким именем.", 409);
 
-    const saved = await saveNode({ ...node, name, parentId, updatedAt: new Date().toISOString() }, null);
+    const saved = await store.saveNode({ ...node, name, parentId, updatedAt: new Date().toISOString() }, null);
     return NextResponse.json({ node: saved });
   });
 }
@@ -99,17 +104,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 export async function DELETE(_: Request, context: { params: Promise<{ id: string }> }) {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
   const { id } = await context.params;
   return withStore(async () => {
-    const nodes = await listNodes();
+    const nodes = await store.listNodes();
     const node = nodes.find((item) => item.id === id);
     if (!node) return fail("Элемент не найден.", 404);
 
     /* Потомки удаляются от листьев к корню: у Postgres на них внешний ключ, и
        обратный порядок упёрся бы в ссылку на ещё живого родителя. */
     const doomed = [...descendants(nodes, id).reverse(), node];
-    for (const item of doomed) await deleteNode(item.id);
+    for (const item of doomed) await store.deleteNode(item.id);
     return NextResponse.json({ deleted: doomed.length });
   });
 }

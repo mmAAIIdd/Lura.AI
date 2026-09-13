@@ -105,15 +105,6 @@ export function ClipIcon(props: Props) {
   );
 }
 
-export function CommandIcon(props: Props) {
-  return (
-    <Glyph {...props}>
-      <path d="m4 17 6-6-6-6" />
-      <path d="M12 19h8" />
-    </Glyph>
-  );
-}
-
 export function SendIcon(props: Props) {
   return (
     <Glyph {...props}>
@@ -128,24 +119,6 @@ export function StopIcon({ className }: Props) {
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <rect x="7" y="7" width="10" height="10" rx="2.5" />
     </svg>
-  );
-}
-
-export function ChatIcon(props: Props) {
-  return (
-    <Glyph {...props}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </Glyph>
-  );
-}
-
-export function HistoryIcon(props: Props) {
-  return (
-    <Glyph {...props}>
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M12 7v5l4 2" />
-    </Glyph>
   );
 }
 
@@ -211,16 +184,6 @@ export function FolderPlusIcon(props: Props) {
       <path d="M12 10v6" />
       <path d="M9 13h6" />
       <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-    </Glyph>
-  );
-}
-
-export function UploadIcon(props: Props) {
-  return (
-    <Glyph {...props}>
-      <path d="M12 3v12" />
-      <path d="m17 8-5-5-5 5" />
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     </Glyph>
   );
 }

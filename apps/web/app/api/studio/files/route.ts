@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireStudioOwner } from "@/lib/studio/auth";
 import { MAX_FILE_CHARS, checkName, nameTaken } from "@/lib/studio/project";
-import { StorageUnavailableError, listNodes, newId, saveNode, type StudioNode } from "@/lib/studio/store";
+import { StorageUnavailableError, newId, studioStore, type StudioNode } from "@/lib/studio/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +18,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
   try {
-    return NextResponse.json({ nodes: await listNodes() });
+    return NextResponse.json({ nodes: await store.listNodes() });
   } catch (error) {
     if (error instanceof StorageUnavailableError) return NextResponse.json({ error: error.message }, { status: 503 });
     throw error;
@@ -30,6 +31,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const owner = await requireStudioOwner();
   if ("denied" in owner) return owner.denied;
+  const store = studioStore(owner.ownerId);
 
   const body = (await request.json().catch(() => null)) as
     | { parentId?: string | null; kind?: string; name?: string; content?: string }
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const nodes = await listNodes();
+    const nodes = await store.listNodes();
     const parentId = body.parentId ?? null;
     if (parentId !== null) {
       const parent = nodes.find((node) => node.id === parentId);
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
       updatedAt: now,
       chars: content === null ? null : content.length,
     };
-    const saved = await saveNode(node, content);
+    const saved = await store.saveNode(node, content);
     return NextResponse.json({ node: saved }, { status: 201 });
   } catch (error) {
     if (error instanceof StorageUnavailableError) return NextResponse.json({ error: error.message }, { status: 503 });

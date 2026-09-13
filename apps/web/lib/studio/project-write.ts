@@ -1,5 +1,5 @@
 import { MAX_FILE_CHARS, checkName, findByPath, findChild, nameTaken, nodePath, splitPath } from "@/lib/studio/project";
-import { listNodes, newId, readNodeContent, saveNode, type StudioNode } from "@/lib/studio/store";
+import { newId, type StudioNode, type StudioStore } from "@/lib/studio/store";
 
 /**
  * Запись в проект: готовые разборы и файлы, которые агент ведёт сам.
@@ -11,6 +11,10 @@ import { listNodes, newId, readNodeContent, saveNode, type StudioNode } from "@/
  *
  * Ошибка записи разбора не роняет разбор: отчёт уже показан пользователю, и
  * терять его из-за недоступного хранилища было бы хуже, чем остаться без файла.
+ *
+ * Хранилище везде первым параметром: оно привязано к владельцу запроса, и
+ * дерево проекта у каждого своё. Значения по умолчанию тут нет намеренно —
+ * забытый аргумент должен быть ошибкой компиляции, а не чужой папкой.
  */
 
 const FOLDER = "Отчёты";
@@ -30,14 +34,18 @@ function fileName(title: string, taken: (name: string) => boolean): string {
   return `${first} (${newId()})`;
 }
 
-export async function saveReportToProject(title: string, markdown: string): Promise<StudioNode | null> {
+export async function saveReportToProject(
+  store: StudioStore,
+  title: string,
+  markdown: string,
+): Promise<StudioNode | null> {
   try {
-    const nodes = await listNodes();
+    const nodes = await store.listNodes();
 
     let folder = nodes.find((node) => node.kind === "folder" && node.parentId === null && node.name === FOLDER);
     if (!folder) {
       const now = new Date().toISOString();
-      folder = await saveNode(
+      folder = await store.saveNode(
         { id: newId(), parentId: null, kind: "folder", name: FOLDER, createdAt: now, updatedAt: now, chars: null },
         null,
       );
@@ -47,7 +55,7 @@ export async function saveReportToProject(title: string, markdown: string): Prom
     if ("error" in checked) return null;
 
     const now = new Date().toISOString();
-    return await saveNode(
+    return await store.saveNode(
       {
         id: newId(),
         parentId: folder.id,
@@ -75,6 +83,7 @@ type Failure = { error: string };
  * созданных, а перечитывать хранилище на каждом шаге незачем.
  */
 async function ensureFolders(
+  store: StudioStore,
   nodes: StudioNode[],
   segments: string[],
 ): Promise<{ parentId: string | null; created: string[] } | Failure> {
@@ -93,7 +102,7 @@ async function ensureFolders(
     }
 
     const now = new Date().toISOString();
-    const folder = await saveNode(
+    const folder = await store.saveNode(
       { id: newId(), parentId, kind: "folder", name: checked.name, createdAt: now, updatedAt: now, chars: null },
       null,
     );
@@ -105,17 +114,21 @@ async function ensureFolders(
   return { parentId, created };
 }
 
-export async function createProjectFolder(rawPath: unknown): Promise<{ path: string; created: string[] } | Failure> {
+export async function createProjectFolder(
+  store: StudioStore,
+  rawPath: unknown,
+): Promise<{ path: string; created: string[] } | Failure> {
   const segments = splitPath(rawPath);
   if (!segments.length) return { error: "Не указан путь папки." };
 
-  const nodes = await listNodes();
-  const result = await ensureFolders(nodes, segments);
+  const nodes = await store.listNodes();
+  const result = await ensureFolders(store, nodes, segments);
   if ("error" in result) return result;
   return { path: segments.join("/"), created: result.created };
 }
 
 export async function writeProjectFile(
+  store: StudioStore,
   rawPath: unknown,
   text: string,
   mode: "overwrite" | "append",
@@ -123,8 +136,8 @@ export async function writeProjectFile(
   const segments = splitPath(rawPath);
   if (!segments.length) return { error: "Не указан путь файла." };
 
-  const nodes = await listNodes();
-  const folders = await ensureFolders(nodes, segments.slice(0, -1));
+  const nodes = await store.listNodes();
+  const folders = await ensureFolders(store, nodes, segments.slice(0, -1));
   if ("error" in folders) return folders;
 
   const checked = checkName(segments[segments.length - 1]);
@@ -135,7 +148,7 @@ export async function writeProjectFile(
 
   let content = text;
   if (existing && mode === "append") {
-    const before = (await readNodeContent(existing.id)) ?? "";
+    const before = (await store.readNodeContent(existing.id)) ?? "";
     /* Дописанный кусок начинается с новой строки: склеенные без переноса
        абзацы превращают Markdown в одну строку. */
     content = before && !before.endsWith("\n") ? `${before}\n${text}` : `${before}${text}`;
@@ -145,7 +158,7 @@ export async function writeProjectFile(
   }
 
   const now = new Date().toISOString();
-  const node = await saveNode(
+  const node = await store.saveNode(
     existing
       ? { ...existing, updatedAt: now, chars: content.length }
       : { id: newId(), parentId: folders.parentId, kind: "file", name: checked.name, createdAt: now, updatedAt: now, chars: content.length },
@@ -155,20 +168,26 @@ export async function writeProjectFile(
   return { node, path: nodePath(nodes, node), existed: Boolean(existing) };
 }
 
-export async function readProjectFile(rawPath: unknown): Promise<{ path: string; content: string } | Failure> {
+export async function readProjectFile(
+  store: StudioStore,
+  rawPath: unknown,
+): Promise<{ path: string; content: string } | Failure> {
   const segments = splitPath(rawPath);
   if (!segments.length) return { error: "Не указан путь файла." };
 
-  const nodes = await listNodes();
+  const nodes = await store.listNodes();
   const node = findByPath(nodes, segments);
   if (!node) return { error: `В проекте нет «${segments.join("/")}». Посмотри структуру через list_project.` };
   if (node.kind === "folder") return { error: `«${nodePath(nodes, node)}» — папка. Её содержимое показывает list_project.` };
-  return { path: nodePath(nodes, node), content: (await readNodeContent(node.id)) ?? "" };
+  return { path: nodePath(nodes, node), content: (await store.readNodeContent(node.id)) ?? "" };
 }
 
 /** Проект списком путей — так его проще читать модели, чем плоский список со ссылками на родителей. */
-export async function listProject(rawFolder: unknown): Promise<{ entries: { path: string; kind: StudioNode["kind"]; chars: number | null }[] } | Failure> {
-  const nodes = await listNodes();
+export async function listProject(
+  store: StudioStore,
+  rawFolder: unknown,
+): Promise<{ entries: { path: string; kind: StudioNode["kind"]; chars: number | null }[] } | Failure> {
+  const nodes = await store.listNodes();
   const segments = splitPath(rawFolder);
 
   let scope = nodes;

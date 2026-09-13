@@ -5,7 +5,7 @@ import { searchDocuments } from "@/lib/studio/rag";
 import { SearchUnavailableError, searchWeb } from "@/lib/studio/search";
 import { analyzeTable, countGroups, parseTable, type GroupInput } from "@/lib/studio/table";
 import { htmlToText, looksTextual, truncate } from "@/lib/studio/text";
-import { listDocuments, readDocumentText, type StudioDocument, type ToolTrace } from "@/lib/studio/store";
+import type { StudioDocument, StudioStore, ToolTrace } from "@/lib/studio/store";
 import { createProjectFolder, listProject, readProjectFile, writeProjectFile } from "@/lib/studio/project-write";
 
 /**
@@ -199,8 +199,14 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
 
 export type ToolOutcome = { response: Record<string, unknown>; trace: ToolTrace };
 
-/** Материалы, которые пользователь разрешил для этого ответа. null — все. */
-export type ToolScope = { sources: ReadonlySet<string> | null };
+/**
+ * Что инструментам разрешено видеть в этом ответе.
+ *
+ * store привязан к владельцу запроса и приходит сверху: доставать хранилище
+ * здесь самим значило бы знать владельца, а знать его инструменту неоткуда.
+ * sources — материалы, отмеченные пользователем; null — все его материалы.
+ */
+export type ToolScope = { store: StudioStore; sources: ReadonlySet<string> | null };
 
 async function runWebSearch(args: Record<string, unknown>): Promise<ToolOutcome> {
   const query = String(args.query ?? "").trim();
@@ -292,7 +298,7 @@ async function runSearchDocuments(args: Record<string, unknown>, scope: ToolScop
   if (!query) throw new Error("Пустой запрос.");
   const limit = Math.min(Math.max(Number(args.limit) || 6, 1), 10);
 
-  const excerpts = await searchDocuments(query, limit, scope.sources);
+  const excerpts = await searchDocuments(scope.store, query, limit, scope.sources);
   return {
     response: {
       excerpts: excerpts.map((excerpt) => ({ document: excerpt.title, text: excerpt.text })),
@@ -320,7 +326,7 @@ async function resolveDocument(raw: string, scope: ToolScope): Promise<StudioDoc
   const query = raw.trim().toLowerCase();
   if (!query) return { error: "Не указано название документа." };
 
-  const all = await listDocuments();
+  const all = await scope.store.listDocuments();
   const chosen = scope.sources;
   const documents = chosen ? all.filter((doc) => chosen.has(doc.id)) : all;
   if (!documents.length) {
@@ -352,7 +358,7 @@ async function runReadDocument(args: Record<string, unknown>, scope: ToolScope):
     return { response: { error: resolved.error }, trace: { name: "read_document", argument: title, summary: resolved.error.slice(0, 160), ok: false } };
   }
 
-  const text = await readDocumentText(resolved.id);
+  const text = await scope.store.readDocumentText(resolved.id);
   const size = LIMITS.documentReadChars;
   const parts = Math.max(1, Math.ceil(text.length / size));
   const part = Math.min(Math.max(Number(args.part) || 1, 1), parts);
@@ -386,7 +392,7 @@ async function runAnalyzeTable(args: Record<string, unknown>, scope: ToolScope):
     return { response: { error: resolved.error }, trace: { name: "analyze_table", argument: name, summary: resolved.error.slice(0, 160), ok: false } };
   }
 
-  const table = parseTable(await readDocumentText(resolved.id));
+  const table = parseTable(await scope.store.readDocumentText(resolved.id));
   if (!table) {
     const message = `Документ «${resolved.title}» не разбирается как таблица. Инструмент работает с CSV и TSV.`;
     return { response: { error: message }, trace: { name: "analyze_table", argument: resolved.title, summary: "не таблица", ok: false } };
@@ -430,7 +436,7 @@ async function runCountGroups(args: Record<string, unknown>, scope: ToolScope): 
     return { response: { error: message }, trace: { name: "count_groups", argument: resolved.title, summary: "нет тем", ok: false } };
   }
 
-  const table = parseTable(await readDocumentText(resolved.id));
+  const table = parseTable(await scope.store.readDocumentText(resolved.id));
   if (!table) {
     const message = `Документ «${resolved.title}» не разбирается как таблица.`;
     return { response: { error: message }, trace: { name: "count_groups", argument: resolved.title, summary: "не таблица", ok: false } };
@@ -469,9 +475,9 @@ function projectFailure(name: string, argument: string, error: string): ToolOutc
   return { response: { error }, trace: { name, argument, summary: error.slice(0, 160), ok: false } };
 }
 
-async function runListProject(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runListProject(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const folder = String(args.folder ?? "");
-  const result = await listProject(folder);
+  const result = await listProject(scope.store, folder);
   if ("error" in result) return projectFailure("list_project", folder, result.error);
 
   const files = result.entries.filter((entry) => entry.kind === "file").length;
@@ -489,9 +495,9 @@ async function runListProject(args: Record<string, unknown>): Promise<ToolOutcom
   };
 }
 
-async function runReadProjectFile(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runReadProjectFile(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const path = String(args.path ?? "");
-  const result = await readProjectFile(path);
+  const result = await readProjectFile(scope.store, path);
   if ("error" in result) return projectFailure("read_project_file", path, result.error);
 
   const size = LIMITS.documentReadChars;
@@ -517,9 +523,9 @@ async function runReadProjectFile(args: Record<string, unknown>): Promise<ToolOu
   };
 }
 
-async function runCreateFolder(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runCreateFolder(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const path = String(args.path ?? "");
-  const result = await createProjectFolder(path);
+  const result = await createProjectFolder(scope.store, path);
   if ("error" in result) return projectFailure("create_folder", path, result.error);
 
   return {
@@ -533,10 +539,10 @@ async function runCreateFolder(args: Record<string, unknown>): Promise<ToolOutco
   };
 }
 
-async function runWriteProjectFile(args: Record<string, unknown>): Promise<ToolOutcome> {
+async function runWriteProjectFile(args: Record<string, unknown>, scope: ToolScope): Promise<ToolOutcome> {
   const path = String(args.path ?? "");
   const mode = args.mode === "append" ? "append" : "overwrite";
-  const result = await writeProjectFile(path, String(args.content ?? ""), mode);
+  const result = await writeProjectFile(scope.store, path, String(args.content ?? ""), mode);
   if ("error" in result) return projectFailure("write_project_file", path, result.error);
 
   const action = !result.existed ? "создан" : mode === "append" ? "дописан" : "перезаписан";
@@ -568,11 +574,16 @@ const RUNNERS: Record<string, (args: Record<string, unknown>, scope: ToolScope) 
  * Ошибка инструмента возвращается модели как результат, а не роняет запрос:
  * агент должен уметь пойти другим путём, а не оборвать анализ на первой
  * недоступной странице.
+ *
+ * У scope нет значения по умолчанию, и это не забывчивость: прежнее
+ * { sources: null } означало «все материалы», и вызов без области просто
+ * компилировался. С владельцем такой вызов был бы вызовом непонятно чьим,
+ * поэтому область теперь обязательна.
  */
 export async function runTool(
   name: string,
   args: Record<string, unknown>,
-  scope: ToolScope = { sources: null },
+  scope: ToolScope,
 ): Promise<ToolOutcome> {
   const runner = RUNNERS[name];
   if (!runner) {
