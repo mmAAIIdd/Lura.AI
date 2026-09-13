@@ -59,6 +59,11 @@ const PANES: { id: Pane; label: string }[] = [
    модели; шире верхней — центр сжимается до колонки текста в пол-экрана. */
 const PANEL = { min: 360, max: 640, initial: 400 };
 const WIDTH_KEY = "lura.studio.panel";
+/* Границы левой колонки. Уже нижней имена разборов и файлов обрезаются почти
+   сразу и дерево перестаёт читаться; шире верхней колонка забирает ширину у
+   центра, где лежит сам отчёт. */
+const EXPLORER = { min: 180, max: 480, initial: 256 };
+const EXPLORER_KEY = "lura.studio.explorer";
 /* Храним снятые галочки, а не поставленные: новый материал сразу участвует в
    разборе, и его не нужно отдельно отмечать после загрузки. */
 const EXCLUDED_KEY = "lura.studio.excluded";
@@ -74,6 +79,18 @@ const PROJECT_WRITES = new Set(["create_folder", "write_project_file"]);
 const isReport = (message: StudioMessage) => message.role === "agent" && message.mode !== "chat";
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+/* Подвижная граница колонки: какую переменную сетки она двигает, в каких
+   пределах, куда записать итог и в какую сторону растёт колонка — левая тянется
+   вслед за курсором (+1), правая против него (−1). */
+type Edge = {
+  prop: string;
+  min: number;
+  max: number;
+  sign: 1 | -1;
+  width: number;
+  set: React.Dispatch<React.SetStateAction<number>>;
+};
 
 function questionOf(message: StudioMessage | undefined): string {
   if (!message) return "";
@@ -108,6 +125,7 @@ export function StudioScreen() {
   const [model, setModel] = useState<LuraModel>("lura-pro");
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelWidth, setPanelWidth] = useState(PANEL.initial);
+  const [explorerWidth, setExplorerWidth] = useState(EXPLORER.initial);
   const abort = useRef<AbortController | null>(null);
   const shell = useRef<HTMLDivElement>(null);
 
@@ -161,13 +179,16 @@ export function StudioScreen() {
     if (wanted) void openThread(wanted);
   }, [refresh, openThread]);
 
-  /* Ширина колонки и снятые галочки — настройки рабочего места: живут в
+  /* Ширины колонок и снятые галочки — настройки рабочего места: живут в
      браузере и переживают перезагрузку. Чтение только после монтирования,
-     иначе разметка на сервере и в браузере разойдётся. */
+     иначе разметка на сервере и в браузере разойдётся. Сохранённое значение
+     всегда зажимается: пределы могли измениться с прошлого визита. */
   useEffect(() => {
     try {
       const saved = Number(localStorage.getItem(WIDTH_KEY));
       if (saved) setPanelWidth(clamp(saved, PANEL.min, PANEL.max));
+      const savedExplorer = Number(localStorage.getItem(EXPLORER_KEY));
+      if (savedExplorer) setExplorerWidth(clamp(savedExplorer, EXPLORER.min, EXPLORER.max));
       const off = JSON.parse(localStorage.getItem(EXCLUDED_KEY) ?? "[]") as unknown;
       if (Array.isArray(off)) setExcluded(new Set(off.filter((id): id is string => typeof id === "string")));
     } catch {
@@ -178,11 +199,12 @@ export function StudioScreen() {
   useEffect(() => {
     try {
       localStorage.setItem(WIDTH_KEY, String(panelWidth));
+      localStorage.setItem(EXPLORER_KEY, String(explorerWidth));
       localStorage.setItem(EXCLUDED_KEY, JSON.stringify([...excluded]));
     } catch {
       /* Не сохранилось — не повод ломать экран. */
     }
-  }, [panelWidth, excluded]);
+  }, [panelWidth, explorerWidth, excluded]);
 
   const documents = workspace.documents;
   const chosen = documents.filter((document) => !excluded.has(document.id));
@@ -344,25 +366,46 @@ export function StudioScreen() {
     if (!fallback) setView((current) => (current === "file" ? "report" : current));
   }, [tabs, activeTab]);
 
-  /* ---------- Граница правой колонки ---------- */
+  /* ---------- Границы колонок ---------- */
+
+  /* Обе границы ведут себя одинаково и отличаются только знаком направления,
+     поэтому обработчик один: две копии этой логики разъехались бы при первой
+     же правке. */
+  const panelEdge: Edge = {
+    prop: "--st-panel-w",
+    min: PANEL.min,
+    max: PANEL.max,
+    sign: -1,
+    width: panelWidth,
+    set: setPanelWidth,
+  };
+  const explorerEdge: Edge = {
+    prop: "--st-explorer-w",
+    min: EXPLORER.min,
+    max: EXPLORER.max,
+    sign: 1,
+    width: explorerWidth,
+    set: setExplorerWidth,
+  };
 
   /**
    * Пока границу тянут, ширина пишется прямо в стиль корневого элемента, а не
    * в состояние: через состояние на каждый пиксель перерисовывался весь отчёт.
    * Слушатели на окне: курсор при быстром движении уходит с узкой полоски.
    */
-  function startResize(event: React.PointerEvent) {
+  function startResize(event: React.PointerEvent, edge: Edge) {
     event.preventDefault();
     const node = shell.current;
     const grip = event.currentTarget as HTMLElement;
     if (!node) return;
 
     const startX = event.clientX;
-    let width = panelWidth;
+    const from = edge.width;
+    let width = from;
 
     const move = (moved: PointerEvent) => {
-      width = clamp(Math.round(panelWidth - (moved.clientX - startX)), PANEL.min, PANEL.max);
-      node.style.setProperty("--st-panel-w", `${width}px`);
+      width = clamp(Math.round(from + edge.sign * (moved.clientX - startX)), edge.min, edge.max);
+      node.style.setProperty(edge.prop, `${width}px`);
     };
     const finish = () => {
       window.removeEventListener("pointermove", move);
@@ -370,7 +413,7 @@ export function StudioScreen() {
       window.removeEventListener("pointercancel", finish);
       document.body.classList.remove("st-resizing");
       grip.classList.remove("is-dragging");
-      setPanelWidth(width);
+      edge.set(width);
     };
 
     document.body.classList.add("st-resizing");
@@ -380,12 +423,12 @@ export function StudioScreen() {
     window.addEventListener("pointercancel", finish);
   }
 
-  function resizeByKey(event: React.KeyboardEvent) {
+  function resizeByKey(event: React.KeyboardEvent, edge: Edge) {
     const step = event.shiftKey ? 40 : 12;
     const direction = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
     if (!direction) return;
     event.preventDefault();
-    setPanelWidth((width) => clamp(width - direction * step, PANEL.min, PANEL.max));
+    edge.set((width) => clamp(width + edge.sign * direction * step, edge.min, edge.max));
   }
 
   /* ---------- Запуск ---------- */
@@ -595,8 +638,8 @@ export function StudioScreen() {
       />
     );
   } else {
-    /* Пустой центр объясняет, чем он станет, и даёт следующий шаг: без этого
-       белое поле на полэкрана читается как незагрузившаяся страница. */
+    /* Пустой центр объясняет, чем он станет: без этого белое поле на полэкрана
+       читается как незагрузившаяся страница. */
     center = (
       <div className="st-idle">
         <div className="st-idle-inner">
@@ -606,9 +649,6 @@ export function StudioScreen() {
               ? "Спросите Lura в обсуждении справа. Для полного разбора с отчётом включите «Разбор» у поля ввода."
               : "Загрузите отзывы, релиз-ноуты или выгрузку метрик — Lura ответит по ним и соберёт отчёт с основаниями."}
           </p>
-          <button type="button" className="st-btn st-btn-primary" onClick={() => openMaterials(null)}>
-            {documents.length ? "Открыть материалы" : "Загрузить материалы"}
-          </button>
         </div>
       </div>
     );
@@ -621,6 +661,7 @@ export function StudioScreen() {
       data-pane={pane}
       style={
         {
+          "--st-explorer-w": `${explorerWidth}px`,
           "--st-panel-w": panelOpen ? `${panelWidth}px` : "0px",
           "--st-grip-w": panelOpen ? "6px" : "0px",
         } as React.CSSProperties
@@ -685,6 +726,16 @@ export function StudioScreen() {
         </div>
       </aside>
 
+      <div
+        className="st-grip st-grip-side"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Ширина проекта"
+        tabIndex={0}
+        onPointerDown={(event) => startResize(event, explorerEdge)}
+        onKeyDown={(event) => resizeByKey(event, explorerEdge)}
+      />
+
       <main className="st-main">
         {tabs.length ? (
           <FileTabs
@@ -714,13 +765,13 @@ export function StudioScreen() {
       </main>
 
       <div
-        className="st-grip"
+        className="st-grip st-grip-panel"
         role="separator"
         aria-orientation="vertical"
         aria-label="Ширина обсуждения"
         tabIndex={panelOpen ? 0 : -1}
-        onPointerDown={startResize}
-        onKeyDown={resizeByKey}
+        onPointerDown={(event) => startResize(event, panelEdge)}
+        onKeyDown={(event) => resizeByKey(event, panelEdge)}
       />
 
       <StudioPanel

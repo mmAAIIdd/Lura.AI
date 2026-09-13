@@ -27,10 +27,13 @@
 
   --st-panel-w: 400px;
   --st-grip-w: 6px;
+  /* Левая граница не сворачивается вместе с обсуждением, поэтому её ширина —
+     отдельная переменная: --st-grip-w обнуляется, когда панель спрятана. */
+  --st-side-grip-w: 6px;
   --st-explorer-w: 256px;
 
   display: grid;
-  grid-template-columns: var(--st-explorer-w) minmax(0, 1fr) var(--st-grip-w) var(--st-panel-w);
+  grid-template-columns: var(--st-explorer-w) var(--st-side-grip-w) minmax(0, 1fr) var(--st-grip-w) var(--st-panel-w);
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100svh;
@@ -99,7 +102,7 @@
 .st-report-sources a { color: var(--st-accent); }
 
 /* Пустой центр. Белое поле посреди экрана читается как незагрузившаяся
-   страница, поэтому здесь сказано, чем он станет, и дан следующий шаг. */
+   страница, поэтому здесь сказано, чем он станет. */
 .st-idle { display: grid; height: 100%; min-height: 0; place-items: center; padding: 24px; }
 .st-idle-inner { display: grid; justify-items: center; gap: 12px; max-width: 460px; text-align: center; }
 .st-idle h1 { margin: 0; font-size: 22px; font-weight: 680; line-height: 30px; letter-spacing: -.02em; }
@@ -122,7 +125,7 @@
 .st-working span:nth-child(3) { width: 86%; }
 .st-working span:nth-child(4) { width: 62%; }
 
-/* ---------- Подвижная граница ---------- */
+/* ---------- Подвижные границы ---------- */
 
 .st-grip {
   position: relative;
@@ -140,8 +143,8 @@
 
 /* Свёрнутая панель оставляет свою границу в сетке нулевой ширины, а не
    убирает её: display:none у элемента сетки сдвигает остальные колонки. */
-.st.no-panel .st-grip { background: transparent; pointer-events: none; }
-.st.no-panel .st-grip::after { display: none; }
+.st.no-panel .st-grip-panel { background: transparent; pointer-events: none; }
+.st.no-panel .st-grip-panel::after { display: none; }
 .st.no-panel .st-panel { overflow: hidden; border: 0; opacity: 0; pointer-events: none; }
 
 body.st-resizing { cursor: col-resize; user-select: none; }
