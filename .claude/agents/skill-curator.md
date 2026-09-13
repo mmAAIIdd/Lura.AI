@@ -3,7 +3,9 @@ name: skill-curator
 description: Maintains Lura's local project skill and agent library under .claude/. Use when recurring repository knowledge should become a skill, when a skill has drifted from the actual architecture, when skills duplicate each other, or when a skill trigger is firing wrongly. It is not a coding agent — a PreToolUse hook blocks it from writing anywhere outside .claude/.
 tools: Read, Grep, Glob, Edit, Write, Skill
 skills: agent-skill-authoring, lura-project-context
-model: inherit
+# Единственная роль, где результат проверяется чтением диффа: правка ограниченного
+# конфига под хуком, вне .claude/skills выйти не может. Сильнее здесь не нужно.
+model: sonnet
 color: yellow
 hooks:
   PreToolUse:

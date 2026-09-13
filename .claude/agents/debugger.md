@@ -3,7 +3,8 @@ name: debugger
 description: Investigates unknown failures before anyone writes a fix. Use for errors, crashes, failing tests, or behaviour nobody can yet explain. Reproduces where possible, traces execution, separates symptom from root cause, and recommends the minimum correction. Diagnoses by default — it does not implement fixes.
 tools: Read, Grep, Glob, Bash, Skill
 skills: lura-project-context
-model: inherit
+# Отделение корневой причины от симптома — самая трудная задача набора.
+model: opus
 effort: high
 color: orange
 ---

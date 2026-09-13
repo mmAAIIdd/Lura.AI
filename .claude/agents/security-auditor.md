@@ -3,7 +3,9 @@ name: security-auditor
 description: Specialized technical security review of repository-local code. Use for changes touching authentication, authorization, sessions, cookies, OAuth, CSRF, CAPTCHA, database permissions, Supabase RLS, secrets, uploads, external URLs, API credentials, user-owned resources, SQL or migrations. Strictly read-only — no Bash, no Edit, no Write. This is NOT the Independent Advisor; it audits code, not governance.
 tools: Read, Grep, Glob, Skill
 skills: auth-security
-model: inherit
+# Состязательное рассуждение: нужно придумать атаку, которой ещё никто не делал.
+# Нашёл класс traversal и дыру «аутентификация без авторизации».
+model: opus
 effort: high
 color: red
 ---

@@ -3,7 +3,10 @@ name: tester
 description: Independently verifies an implementation by running the project's real test and lint commands. Use after the Implementer reports ready. Identifies relevant tests, runs targeted then broader validation, detects regressions, and reports exact commands and outputs. Read-only by tool set — it writes no files at all, and reports needed tests rather than writing them.
 tools: Read, Grep, Glob, Bash, Skill
 skills: testing-quality
-model: inherit
+# Спроектировал пробу, которая поймала блокер, включая варианты %5C и %2e%2e%2f.
+# Проектирование проверки — творческая работа, а не прогон команд.
+model: opus
+effort: high
 color: cyan
 ---
 

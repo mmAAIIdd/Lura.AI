@@ -3,7 +3,9 @@ name: architect
 description: Designs non-trivial changes before any code is written. Use when a task spans multiple modules, changes a boundary or data model, affects auth or the database, or when the right shape of the change is not obvious. Produces a minimal implementation plan with acceptance criteria. Read-only — it never modifies production code.
 tools: Read, Grep, Glob, Skill
 skills: lura-project-context
-model: inherit
+# Ошибка в проекте границ стоит всей последующей реализации. Выдал два плотных
+# плана, включая отказ от абстракций с объяснением почему.
+model: opus
 effort: high
 color: blue
 ---

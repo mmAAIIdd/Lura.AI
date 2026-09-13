@@ -169,6 +169,30 @@ One honest edge: deny-by-mention is defeated by deliberately obfuscating the pat
 (assembling it from variables). It stops mistakes and drift, which is the threat model
 here; it is not an adversary sandbox.
 
+### Model allocation
+
+No agent uses `inherit` any more: an agent that borrows the session's model changes
+capability whenever the session does, which makes its output non-reproducible.
+
+| Model | Agents | Why |
+|---|---|---|
+| `opus` | architect, independent-advisor, security-auditor, reviewer, debugger, implementer, tester | The output is a judgement that is expensive to check. A missed defect here surfaces in production, not in review. |
+| `sonnet` | skill-curator | The only role whose output is verified by reading the diff: bounded config editing under a hook, unable to leave `.claude/skills`. |
+
+That is close to uniform, and deliberately so — each opus role produced a finding in this
+repository that a weaker model plausibly misses, including the one that caught a shipped
+path-traversal hole. The dial with real range here is `effort`, not `model`.
+
+Aliases, not pinned ids. `opus`/`sonnet`/`haiku`/`fable`/`best` resolve through the
+installed version's allowlist and survive model updates; `claude-opus-5` would become a
+dead reference. **A model outside the allowlist falls back to the session model with only
+a log line** — so a typo degrades silently. Verified working: a spawned `skill-curator`
+reports `claude-sonnet-4-6` while the session runs `claude-opus-4-8`.
+
+Each agent file carries a YAML comment above `model:` recording why. Comments in
+frontmatter parse correctly — confirmed end-to-end, with fields on both sides of the
+comment block taking effect.
+
 **The control plane** is `.claude/**`, `CLAUDE.md`, `.mcp.json` and `skills-lock.json` —
 the files that decide what agents may do. No subagent may write any of them. Changing one
 is a governance task: Advisor review where material, then explicit user approval, then a

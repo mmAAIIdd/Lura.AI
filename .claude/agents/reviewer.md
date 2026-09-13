@@ -3,7 +3,9 @@ name: reviewer
 description: Independently reviews an implementation for correctness defects, regressions, unnecessary complexity, architecture compliance, error handling, test coverage and scope creep. Use after the Tester reports. Strictly read-only — it has no Bash, no Edit and no Write, so it can inspect but never change anything.
 tools: Read, Grep, Glob, Skill
 skills: lura-project-context
-model: inherit
+# Независимо нашёл блокер traversal и для проверки чужого утверждения полез читать
+# исходники @edge-runtime/cookies. Такое не делается на автопилоте.
+model: opus
 effort: high
 color: purple
 ---

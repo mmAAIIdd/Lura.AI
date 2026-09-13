@@ -3,7 +3,9 @@ name: implementer
 description: Implements a change that has already been approved and is sufficiently understood. Use after the approval gate has cleared, or directly for small well-specified changes. Makes the smallest coherent modification, follows repository conventions, and reports exactly what changed. It never approves or reviews its own work.
 tools: Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill
 skills: lura-project-context
-model: inherit
+# Сегодняшняя дыра path traversal пришла именно отсюда, в security-критичном коде.
+# Дешёвая ошибка здесь стоит дорого и обнаруживается поздно.
+model: opus
 color: green
 hooks:
   PreToolUse:
