@@ -50,6 +50,36 @@ function paths(root: string): Paths {
 }
 
 /**
+ * Удаление файла, переживающее чужой захват.
+ *
+ * Рабочая папка лежит внутри OneDrive, и во время синхронизации OneDrive — а с
+ * ним и защитник Windows — держит на файле открытый дескриптор. unlink в этот
+ * момент падает с EPERM или UNKNOWN, а тот же самый вызов мгновением позже
+ * проходит: это промах по времени, а не ошибка логики. В логе одно удаление
+ * документа ответило 500, 500 и только с третьего раза 200.
+ *
+ * force здесь не помогает — он гасит ENOENT и только его. А вот
+ * maxRetries/retryDelay помогают: fs.rm повторяет попытку именно на EBUSY,
+ * EMFILE, ENFILE, ENOTEMPTY и EPERM с линейной паузой. UNKNOWN в этот список не
+ * входит, а в логе он был, поэтому на него здесь отдельный повтор — одного
+ * maxRetries не хватает.
+ *
+ * Паузы нарочно короткие: на другом конце человек ждёт свой клик, и худший
+ * случай должен укладываться примерно в секунду, а не в десять. Удачное
+ * удаление не ждёт нисколько — первая же попытка возвращает как раньше.
+ */
+async function removeFile(file: string): Promise<void> {
+  const options = { force: true, maxRetries: 5, retryDelay: 30 };
+  try {
+    await fs.rm(file, options);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "UNKNOWN") throw error;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await fs.rm(file, options);
+  }
+}
+
+/**
  * Проверка базовой папки на пригодность.
  *
  * Одного mkdir мало: он проходит и там, где потом падает запись, а на
@@ -63,7 +93,7 @@ async function usable(base: string): Promise<string | null> {
     await fs.mkdir(base, { recursive: true });
     const probe = path.join(base, ".writable");
     await fs.writeFile(probe, "ok", "utf8");
-    await fs.rm(probe, { force: true });
+    await removeFile(probe);
     return base;
   } catch {
     return null;
@@ -333,9 +363,9 @@ export function createFileStore(owner: OwnerId): StudioStore {
       if (!isSafeId(id)) return;
       const dirs = await ownerPaths(owner);
       await Promise.all([
-        fs.rm(path.join(dirs.documents, `${id}.json`), { force: true }),
-        fs.rm(path.join(dirs.documents, `${id}.txt`), { force: true }),
-        fs.rm(path.join(dirs.index, `${id}.json`), { force: true }),
+        removeFile(path.join(dirs.documents, `${id}.json`)),
+        removeFile(path.join(dirs.documents, `${id}.txt`)),
+        removeFile(path.join(dirs.index, `${id}.json`)),
       ]);
     },
 
@@ -403,7 +433,7 @@ export function createFileStore(owner: OwnerId): StudioStore {
     async deleteThread(id) {
       if (!isSafeId(id)) return;
       const dirs = await ownerPaths(owner);
-      await fs.rm(path.join(dirs.threads, `${id}.json`), { force: true });
+      await removeFile(path.join(dirs.threads, `${id}.json`));
     },
 
     async saveArtifact(id, markdown) {
@@ -462,7 +492,7 @@ export function createFileStore(owner: OwnerId): StudioStore {
       const file = path.join(dirs.project, "index.json");
       const nodes = (await readJson<StudioNode[]>(file)) ?? [];
       await writeJson(file, nodes.filter((item) => item.id !== id));
-      await fs.rm(path.join(dirs.project, `${id}.md`), { force: true });
+      await removeFile(path.join(dirs.project, `${id}.md`));
     },
   };
 }
