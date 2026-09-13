@@ -135,20 +135,39 @@ alter table studio.threads   alter column owner_id set not null;
 alter table studio.artifacts alter column owner_id set not null;
 alter table studio.nodes     alter column owner_id set not null;
 
--- add constraint if not exists в Postgres нет, поэтому повтор ловится как
--- duplicate_object — единственный способ оставить файл идемпотентным.
+-- add constraint if not exists в Postgres нет, поэтому наличие проверяем сами
+-- по pg_constraint — как if not exists у всего остального файла.
+--
+-- Ловить исключение здесь нельзя вслепую: SQLSTATE у повтора зависит от вида
+-- ограничения. unique заводит под собой индекс и на повторе падает как
+-- duplicate_table (42P07, «relation already exists»), а внешний ключ ниже — как
+-- duplicate_object (42710). Проверка по каталогу от этой разницы не зависит и
+-- не требует угадывать код.
+--
+-- Гонки между проверкой и alter нет: блок идёт под advisory-блокировкой, взятой
+-- выше в этой же транзакции.
 do $$ begin
-  alter table studio.documents add constraint documents_id_owner unique (id, owner_id);
-exception when duplicate_object then null; end $$;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'studio.documents'::regclass and conname = 'documents_id_owner'
+  ) then
+    alter table studio.documents add constraint documents_id_owner unique (id, owner_id);
+  end if;
+end $$;
 
 -- Владелец фрагмента обязан совпадать с владельцем документа — это проверяет
 -- база, а не приложение. Ошибка в коде выборки не может выдать чужой фрагмент:
 -- его просто некуда было бы записать.
 do $$ begin
-  alter table studio.chunks add constraint chunks_owner_fk
-    foreign key (document_id, owner_id)
-    references studio.documents (id, owner_id) on delete cascade;
-exception when duplicate_object then null; end $$;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'studio.chunks'::regclass and conname = 'chunks_owner_fk'
+  ) then
+    alter table studio.chunks add constraint chunks_owner_fk
+      foreign key (document_id, owner_id)
+      references studio.documents (id, owner_id) on delete cascade;
+  end if;
+end $$;
 
 create index if not exists documents_owner on studio.documents (owner_id);
 -- Составной индекс — для выборок владельца. Одиночный chunks_document он не
