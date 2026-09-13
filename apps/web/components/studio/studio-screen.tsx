@@ -43,8 +43,9 @@ const EMPTY: WorkspaceState = {
   runtime: { ready: true, models: ["lura-pro", "lura-fast"], search: null, storage: "", ephemeral: false },
 };
 
-/* Режим становится известен первым событием потока; до него — null. */
-type Live = { text: string; tools: ToolTrace[]; mode: RunMode | null };
+/* Режим становится известен первым событием потока; до него — null. Отметка
+   запуска нужна центру: по ней он показывает, сколько уже идёт разбор. */
+type Live = { text: string; tools: ToolTrace[]; mode: RunMode | null; startedAt: number };
 type View = "report" | "context" | "file";
 /* На узком экране колонки открываются по одной. */
 type Pane = "side" | "main" | "chat";
@@ -439,7 +440,7 @@ export function StudioScreen() {
 
     setBusy(true);
     setError(null);
-    setLive({ text: "", tools: [], mode: null });
+    setLive({ text: "", tools: [], mode: null, startedAt: Date.now() });
     if (!current?.id) setPending(report ? titleFrom(prompt) : null);
     if (report) {
       setView("report");
